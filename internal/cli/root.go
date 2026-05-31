@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,15 +19,18 @@ import (
 )
 
 var (
-	tagsFlag      []string
-	grupoFlag     string
-	catFlag       string
-	contentFlag   string
-	sortFlag      string
-	jsonFlag      bool
-	rawFlag       bool
-	forceFlag     bool
+	tagsFlag    []string
+	grupoFlag   string
+	catFlag     string
+	contentFlag string
+	sortFlag    string
+	limitFlag   int
+	jsonFlag    bool
+	rawFlag     bool
+	forceFlag   bool
 )
+
+var Version = "dev"
 
 var defaultStoragePath string
 
@@ -45,15 +49,16 @@ type App struct {
 
 func NewRootCmd() *cobra.Command {
 	root := &cobra.Command{
-		Use:   "nota",
-		Short: "CLI Knowledge Base powered by markdown",
-		Long:  "Nota is a CLI tool for storing and searching markdown notes with semantic search.",
+		Use:          "nota",
+		Short:        "CLI Knowledge Base powered by markdown",
+		Long:         "Nota is a CLI tool for storing and searching markdown notes with semantic search.",
+		Version:      Version,
 		SilenceUsage: true,
 	}
 
-	root.PersistentFlags().StringSliceVar(&tagsFlag, "tags", nil, "tags (comma-separated)")
-	root.PersistentFlags().StringVar(&grupoFlag, "grupo", "", "group")
-	root.PersistentFlags().StringVar(&catFlag, "cat", "", "category")
+	root.PersistentFlags().StringSliceVarP(&tagsFlag, "tags", "t", nil, "tags (comma-separated)")
+	root.PersistentFlags().StringVarP(&grupoFlag, "grupo", "g", "", "group")
+	root.PersistentFlags().StringVarP(&catFlag, "cat", "c", "", "category")
 
 	root.AddCommand(newCmd())
 	root.AddCommand(saveCmd())
@@ -107,7 +112,7 @@ func ensureSetup() (*App, error) {
 
 func newCmd() *cobra.Command {
 	cmd := &cobra.Command{Use: "new", Short: "Create a new note", Aliases: []string{"n"}}
-	cmd.Flags().StringVarP(&contentFlag, "content", "c", "", "content (skip editor)")
+	cmd.Flags().StringVar(&contentFlag, "content", "", "content (skip editor)")
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		app, err := ensureSetup()
 		if err != nil {
@@ -133,21 +138,38 @@ func saveCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "save [text]",
 		Short: "Quick capture a note",
-		Args:  cobra.MinimumNArgs(1),
+		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app, err := ensureSetup()
 			if err != nil {
 				return err
 			}
+
+			var content string
+			if len(args) > 0 {
+				content = args[0]
+			}
+
 			stat, _ := os.Stdin.Stat()
 			fromPipe := stat.Mode()&os.ModeCharDevice == 0
+			if fromPipe {
+				b, err := io.ReadAll(os.Stdin)
+				if err != nil {
+					return fmt.Errorf("reading pipe: %w", err)
+				}
+				content = string(b)
+			}
+
+			if content == "" {
+				return fmt.Errorf("provide text argument or pipe content: nota save \"text\" or echo \"text\" | nota save")
+			}
+
 			uc := usecase.NewSaveUseCase(app.docRepo, app.embed)
 			doc, err := uc.Execute(context.Background(), usecase.SaveInput{
-				Content:   strings.Join(args, " "),
+				Content:   content,
 				Tags:      tagsFlag,
 				Grupo:     grupoFlag,
 				Categoria: catFlag,
-				FromPipe:  fromPipe,
 			})
 			if err != nil {
 				return err
@@ -159,35 +181,66 @@ func saveCmd() *cobra.Command {
 }
 
 func editCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "edit [filter]",
-		Short: "Edit a note",
+	cmd := &cobra.Command{
+		Use:     "edit [id]",
+		Short:   "Edit a note",
 		Aliases: []string{"e"},
-		RunE: func(cmd *cobra.Command, args []string) error {
-			app, err := ensureSetup()
-			if err != nil {
-				return err
-			}
-			docs, err := app.docRepo.List(context.Background(), domain.ListFilter{Limit: 100})
-			if err != nil {
-				return err
-			}
-			if len(docs) == 0 {
-				fmt.Println("No notes found")
-				return nil
-			}
-			selected, err := tui.RunFuzzyPicker(docs, "Edit")
-			if err != nil || selected == nil {
-				return err
-			}
-			uc := usecase.NewEditUseCase(app.docRepo, app.embed, app.config.Editor)
-			if err := uc.Execute(context.Background(), selected.ID); err != nil {
-				return err
-			}
-			fmt.Printf("Updated: %s\n", selected.Title)
-			return nil
-		},
 	}
+	cmd.Flags().StringVar(&contentFlag, "content", "", "new content (skip editor, for agents)")
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		app, err := ensureSetup()
+		if err != nil {
+			return err
+		}
+		ctx := context.Background()
+
+		if contentFlag != "" && len(args) > 0 {
+			doc, err := app.docRepo.GetByID(ctx, args[0])
+			if err != nil {
+				return fmt.Errorf("document not found: %w", err)
+			}
+			doc.Content = contentFlag
+			doc.Title = doc.ExtractTitle()
+			embedding, err := app.embed.Generate(ctx, contentFlag)
+			if err == nil {
+				doc.Embedding = embedding
+			}
+			if err := app.docRepo.Update(ctx, doc); err != nil {
+				return err
+			}
+			fmt.Printf("Updated: %s (%s)\n", doc.Title, doc.ID)
+			return nil
+		}
+
+		if len(args) > 0 {
+			uc := usecase.NewEditUseCase(app.docRepo, app.embed, app.config.Editor)
+			if err := uc.Execute(ctx, args[0]); err != nil {
+				return err
+			}
+			fmt.Printf("Updated: %s\n", args[0])
+			return nil
+		}
+
+		docs, err := app.docRepo.List(ctx, domain.ListFilter{Limit: 100})
+		if err != nil {
+			return err
+		}
+		if len(docs) == 0 {
+			fmt.Println("No notes found")
+			return nil
+		}
+		selected, err := tui.RunFuzzyPicker(docs, "Edit")
+		if err != nil || selected == nil {
+			return err
+		}
+		uc := usecase.NewEditUseCase(app.docRepo, app.embed, app.config.Editor)
+		if err := uc.Execute(ctx, selected.ID); err != nil {
+			return err
+		}
+		fmt.Printf("Updated: %s\n", selected.Title)
+		return nil
+	}
+	return cmd
 }
 
 func openCmd() *cobra.Command {
@@ -359,6 +412,7 @@ func searchCmd() *cobra.Command {
 		Args:  cobra.MinimumNArgs(1),
 	}
 	cmd.Flags().BoolVar(&jsonFlag, "json", false, "output as JSON")
+	cmd.Flags().IntVar(&limitFlag, "limit", 20, "max results")
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		app, err := ensureSetup()
 		if err != nil {
@@ -370,7 +424,7 @@ func searchCmd() *cobra.Command {
 			Query: query,
 			Tags:  tagsFlag,
 			Grupo: grupoFlag,
-			Limit: 20,
+			Limit: limitFlag,
 		})
 		if err != nil {
 			return err

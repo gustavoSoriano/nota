@@ -1,36 +1,49 @@
-# Nota CLI - Skill para Agentes
+# Nota CLI - Knowledge Base Skill
 
 Nota é um CLI de base de conhecimentos alimentado por markdown com busca semântica via ollama.
 
+## Quando usar
+
+- O usuário pede pra salvar, buscar, ou gerenciar anotações/conhecimento
+- O usuário menciona notes, documentos, knowledge base, base de conhecimento
+- O usuário quer armazenar links, how-tos, RFCs, post-mortems, transcrições, etc.
+- Você mesmo (agente) precisa guardar ou recuperar informações do conhecimento do usuário
+
 ## Comandos para agentes
 
-### Criar nota
+### Criar nota (sem abrir editor)
 ```bash
-nota new --content "markdown content here" --tags tag1,tag2 --grupo dev --cat howto
+nota new --content "markdown content" --tags tag1,tag2 --grupo dev --cat howto
 ```
 
-### Quick capture
+### Quick capture (texto curto, link)
 ```bash
 nota save "texto ou link" --tags tag1,tag2 --grupo dev
+nota save "texto" -t api -g dev
 echo "conteúdo do pipe" | nota save --tags incident
 ```
 
-### Buscar notas (retorna JSON)
+### Busca semântica (JSON)
 ```bash
-nota search "query semântica" --json
-nota search "api node express" --json --tags dev
+nota search "query" --json
+nota search "api node" --json --tags dev --limit 10
 ```
 
-### Abrir nota (retorna markdown puro)
+### Abrir nota (markdown puro)
 ```bash
 nota open <id> --raw
 ```
 
-### Listar notas (retorna JSON)
+### Editar nota (sem abrir editor, pra agentes)
+```bash
+nota edit <id> --content "novo conteúdo"
+```
+
+### Listar notas (JSON)
 ```bash
 nota list --json
 nota list --tags dev --sort recent --json
-nota list --grupo dev --json
+nota list -g dev --json
 ```
 
 ### Deletar nota
@@ -38,18 +51,18 @@ nota list --grupo dev --json
 nota delete <id> --force
 ```
 
-### Importar arquivos .md
+### Importar .md
 ```bash
-nota import ./pasta/ --tags dev --grupo docs
+nota import ./pasta/ --tags dev
 nota import arquivo.md --tags readme
 ```
 
 ### Linkar notas
 ```bash
-nota link  # abre fuzzy finder interativo
+nota link
 ```
 
-### Ver tags existentes
+### Ver tags
 ```bash
 nota tags --json
 ```
@@ -57,56 +70,50 @@ nota tags --json
 ### Backup e restore
 ```bash
 nota backup
-nota restore ./nota-backup-2026-05-31-100000.json
+nota restore <arquivo>
 ```
 
-### Ver config
+### Versão e config
 ```bash
+nota --version
 nota config
 ```
 
-## Formato de resposta JSON
+## Flags
+
+- `-t, --tags` - tags separadas por vírgula
+- `-g, --grupo` - grupo
+- `-c, --cat` - categoria
+- `--content` - conteúdo direto (new, edit)
+- `--json` - saída JSON (search, list, tags)
+- `--raw` - markdown puro (open)
+- `--force` - sem confirmação (delete)
+- `--limit` - máximo de resultados (search, padrão 20)
+
+## Formato JSON
 
 ### search --json
 ```json
-[
-  {
-    "id": "abc12345",
-    "title": "Como criar API em Node",
-    "score": 0.95,
-    "tags": ["api", "node"]
-  }
-]
+[{"id": "abc123", "title": "...", "score": 0.95, "tags": ["..."]}]
 ```
 
 ### list --json
 ```json
-[
-  {
-    "id": "abc12345",
-    "title": "Como criar API em Node",
-    "tags": ["api", "node"],
-    "grupo": "dev",
-    "categoria": "howto",
-    "created_at": "2026-05-31T10:00:00Z",
-    "updated_at": "2026-05-31T10:00:00Z",
-    "accessed": 3
-  }
-]
+[{"id": "abc123", "title": "...", "tags": [...], "grupo": "...", "categoria": "...", "created_at": "...", "accessed": 3}]
 ```
 
 ### open --raw
-Retorna markdown puro do documento no stdout.
+Markdown puro no stdout.
 
-## Workflow recomendado para agentes
+## Workflow recomendado
 
-1. **Pesquisar**: `nota search "query" --json` para encontrar documentos relevantes
-2. **Ler**: `nota open <id> --raw` para obter conteúdo completo
-3. **Salvar**: `nota save "informação" --tags x,y` para armazenar novas informações
-4. **Criar**: `nota new --content "markdown" --tags x --grupo y` para documentos estruturados
-5. **Deletar**: `nota delete <id> --force` para remover documentos
+1. `nota search "query" --json` → encontra docs relevantes
+2. `nota open <id> --raw` → lê conteúdo completo
+3. `nota save "info" --tags x` → salva nova info
+4. `nota new --content "md" --tags x` → salva doc estruturado
+5. `nota edit <id> --content "novo"` → atualiza doc existente
+6. `nota delete <id> --force` → remove doc
 
 ## Requisitos
-
-- ollama rodando com modelo `nomic-embed-text:latest`
-- Binário `nota` no PATH
+- ollama rodando com `nomic-embed-text:latest`
+- binário `nota` no PATH

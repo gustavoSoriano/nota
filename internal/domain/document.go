@@ -1,6 +1,9 @@
 package domain
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 type Document struct {
 	ID         string    `json:"id"`
@@ -16,14 +19,15 @@ type Document struct {
 }
 
 func (d *Document) ExtractTitle() string {
-	if d.Title != "" {
-		return d.Title
-	}
 	for _, line := range splitLines(d.Content) {
 		trimmed := trimHashPrefix(line)
+		trimmed = strings.TrimSpace(trimmed)
 		if trimmed != "" {
 			return truncated(trimmed, 120)
 		}
+	}
+	if d.Title != "" {
+		return d.Title
 	}
 	return "untitled"
 }
