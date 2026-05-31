@@ -82,7 +82,7 @@ Lista paginada dos últimos 20 documentos. Aceita filtros por tags, grupo, categ
 
 ### `nota search "query" [--tags tag1,tag2] [--grupo grupo] [--cat categoria]`
 
-Busca semântica usando embeddings (ollama + nomic-embed-text). Retorna lista rankeada por relevância com preview. Permite filtros adicionais. Se ollama indisponível, fallback pra busca full-text (SQLite FTS5).
+Busca semântica usando embeddings (ollama + nomic-embed-text). Retorna lista rankeada por relevância com preview. Permite filtros adicionais.
 
 ### `nota link`
 
