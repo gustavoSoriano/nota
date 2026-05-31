@@ -45,7 +45,8 @@ Ao rodar `nota` pela primeira vez:
 - Cria `~/.nota/` com `data.db` e `config.json`
 - Detecta ollama e modelo nomic-embed-text
 - Se ollama não encontrado, mostra instrução de instalação
-- Pergunta editor preferido (detecta vim/nano/code automaticamente)
+- Instala micro editor se não tiver nenhum editor configurado
+- Salva micro como `$EDITOR` no config do nota
 
 ## Stack
 
@@ -54,6 +55,7 @@ Ao rodar `nota` pela primeira vez:
 - **Storage**: SQLite local (`~/.nota/data.db`)
 - **Busca semântica**: ollama com nomic-embed-text
 - **TUI**: Charmbracelet (bubbletea, bubbles, lipgloss, huh)
+- **Editor**: micro (instalado automaticamente, substituível via config)
 - **Distribuição**: Go binary compilado para todos os SOs via goreleaser
 
 ## Duas interfaces
