@@ -24,17 +24,37 @@ Uso intenso em T.I.: reuniões, transcrições, links de ferramentas, anotaçõe
 - **TUI**: Charmbracelet (bubbletea, bubbles, lipgloss, huh)
 - **Distribuição**: Go binary compilado para todos os SOs via goreleaser
 
+## Duas interfaces
+
+O nota tem dois modos de saída:
+
+- **TUI interativo** (padrão): fuzzy finder, navegação com setas, preview, cores. Pra uso humano no terminal.
+- **Machine-readable** (flags `--json`, `--raw`): saída estruturada parseável. Pra agentes e scripts.
+
+Quando o TUI não faz sentido (pipe, `--json`, `--raw`), ele não é renderizado. O comando detecta automaticamente se stdout é um TTY.
+
 ## Uso por agentes
 
-Agentes usam via skill que ensina o CLI. Não é MCP server.
+Agentes usam via skill que ensina o CLI. Não é MCP server. Comandos preferidos por agentes:
+
+```bash
+nota search "query" --json        # array JSON com resultados
+nota open <id> --raw              # markdown puro do documento
+nota save "texto" --tags x,y      # salva rápido sem TUI
+nota new --content "md aqui" --tags x  # cria direto sem editor
+nota list --json                  # lista paginada em JSON
+nota delete <id> --force          # deleta sem fuzzy finder
+```
 
 ---
 
 ## Comandos
 
-### `nota new [--tags tag1,tag2] [--grupo grupo] [--cat categoria]`
+### `nota new [--tags tag1,tag2] [--grupo grupo] [--cat categoria] [--content "markdown"]`
 
 Abre o `$EDITOR` do sistema para escrever o markdown. Metadata (tags, grupo, categoria) passada por flags. Arquivo salvo com YAML frontmatter gerado automaticamente.
+
+Flag `--content` cria direto sem abrir editor (uso por agentes).
 
 Frontmatter exemplo:
 ```yaml
@@ -68,29 +88,29 @@ Importa arquivo .md ou pasta inteira de .mds. Flags opcionais pra adicionar meta
 
 Abre fuzzy finder interativo com busca em tempo real (título, tags, conteúdo). Filtra, navega com setas, enter seleciona e abre no `$EDITOR`. Se receber filtro como argumento, pré-filtra a lista.
 
-### `nota open [filtro]`
+### `nota open <id> [--raw]`
 
-Mesmo fuzzy finder do edit, mas mostra o documento no terminal (read-only). Agentes usam bastante esse comando.
+Fuzzy finder pra selecionar documento e mostrar no terminal (read-only, scrollável). Com `--raw`, imprime markdown puro no stdout sem TUI (uso por agentes).
 
-### `nota delete [filtro]`
+### `nota delete <id> [--force]`
 
-Fuzzy finder → seleciona → pede confirmação → remove.
+Fuzzy finder → seleciona → pede confirmação → remove. Com `--force` + id, deleta direto sem fuzzy finder nem confirmação (uso por agentes).
 
-### `nota list [--tags tag1,tag2] [--grupo grupo] [--cat categoria] [--sort recent|accessed|alpha]`
+### `nota list [--tags tag1,tag2] [--grupo grupo] [--cat categoria] [--sort recent|accessed|alpha] [--json]`
 
-Lista paginada dos últimos 20 documentos. Aceita filtros por tags, grupo, categoria. Ordenação por recent, mais acessados, alfabética.
+Lista paginada dos últimos 20 documentos. Aceita filtros por tags, grupo, categoria. Ordenação por recent, mais acessados, alfabética. Com `--json`, retorna array JSON parseável.
 
-### `nota search "query" [--tags tag1,tag2] [--grupo grupo] [--cat categoria]`
+### `nota search "query" [--tags tag1,tag2] [--grupo grupo] [--cat categoria] [--json]`
 
-Busca semântica usando embeddings (ollama + nomic-embed-text). Retorna lista rankeada por relevância com preview. Permite filtros adicionais.
+Busca semântica usando embeddings (ollama + nomic-embed-text). Retorna TUI interativa rankeada por relevância com preview. Permite filtros adicionais. Com `--json`, retorna array JSON parseável (uso por agentes).
 
 ### `nota link`
 
 Fuzzy finder pra selecionar duas notas e criar relação. Ao abrir uma nota (`nota open`), mostra notas linkadas. Cria um grafo de conhecimento entre os documentos.
 
-### `nota tags`
+### `nota tags [--json]`
 
-Lista todas as tags existentes com contagem de uso. Útil pra descobrir e padronizar vocabulário.
+Lista todas as tags existentes com contagem de uso. Com `--json`, retorna array JSON parseável.
 
 ### `nota backup`
 
