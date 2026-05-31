@@ -15,6 +15,38 @@ Uso intenso em T.I.: reuniões, transcrições, links de ferramentas, anotaçõe
 - Tudo via linha de comando
 - Requer ollama rodando com modelo nomic-embed-text
 
+## Instalação
+
+### Opção 1: Install script (recomendado)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/seu-user/nota/main/install.sh | bash
+```
+
+Detecta SO e arquitetura, baixa binário correto, move pra `/usr/local/bin/`, pronto.
+
+### Opção 2: Go install
+
+```bash
+go install github.com/seu-user/nota@latest
+```
+
+### Opção 3: Download manual
+
+Baixa o binário do GitHub Releases, move pro PATH:
+
+```bash
+mv nota /usr/local/bin/
+```
+
+### Setup na primeira execução
+
+Ao rodar `nota` pela primeira vez:
+- Cria `~/.nota/` com `data.db` e `config.json`
+- Detecta ollama e modelo nomic-embed-text
+- Se ollama não encontrado, mostra instrução de instalação
+- Pergunta editor preferido (detecta vim/nano/code automaticamente)
+
 ## Stack
 
 - **Linguagem**: Go
