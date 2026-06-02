@@ -16,8 +16,8 @@ func NewListUseCase(repo domain.DocumentRepository) *ListUseCase {
 
 type ListInput struct {
 	Tags      []string
-	Grupo     string
-	Categoria string
+	Notebook   string
+	Category   string
 	Sort      string
 	Limit     int
 	Offset    int
@@ -25,12 +25,12 @@ type ListInput struct {
 
 func (uc *ListUseCase) Execute(ctx context.Context, in ListInput) ([]*domain.Document, error) {
 	if in.Limit <= 0 {
-		in.Limit = 20
+		in.Limit = 40
 	}
 	return uc.repo.List(ctx, domain.ListFilter{
 		Tags:      in.Tags,
-		Grupo:     in.Grupo,
-		Categoria: in.Categoria,
+		Notebook:   in.Notebook,
+		Category:   in.Category,
 		Sort:      in.Sort,
 		Limit:     in.Limit,
 		Offset:    in.Offset,

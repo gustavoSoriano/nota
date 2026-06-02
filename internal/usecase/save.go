@@ -23,8 +23,8 @@ func NewSaveUseCase(repo domain.DocumentRepository, embed domain.EmbeddingServic
 type SaveInput struct {
 	Content   string
 	Tags      []string
-	Grupo     string
-	Categoria string
+	Notebook  string
+	Category  string
 	FromPipe  bool
 }
 
@@ -49,8 +49,8 @@ func (uc *SaveUseCase) Execute(ctx context.Context, in SaveInput) (*domain.Docum
 		ID:        uuid.New().String()[:8],
 		Content:   content,
 		Tags:      in.Tags,
-		Grupo:     in.Grupo,
-		Categoria: in.Categoria,
+		Notebook:  in.Notebook,
+		Category:  in.Category,
 		CreatedAt: now,
 		UpdatedAt: now,
 	}

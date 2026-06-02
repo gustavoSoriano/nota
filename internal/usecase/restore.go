@@ -28,8 +28,8 @@ func (uc *RestoreUseCase) Execute(ctx context.Context, filePath string) error {
 		Title     string   `json:"title"`
 		Content   string   `json:"content"`
 		Tags      []string `json:"tags"`
-		Grupo     string   `json:"grupo"`
-		Categoria string   `json:"categoria"`
+		Notebook  string   `json:"notebook"`
+		Category  string   `json:"category"`
 		CreatedAt string   `json:"created_at"`
 		UpdatedAt string   `json:"updated_at"`
 		Accessed  int      `json:"accessed"`
@@ -45,8 +45,8 @@ func (uc *RestoreUseCase) Execute(ctx context.Context, filePath string) error {
 			Title:    b.Title,
 			Content:  b.Content,
 			Tags:     b.Tags,
-			Grupo:    b.Grupo,
-			Categoria: b.Categoria,
+			Notebook:  b.Notebook,
+			Category:  b.Category,
 			Accessed: b.Accessed,
 		}
 	}

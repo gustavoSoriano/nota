@@ -37,6 +37,7 @@ func NewDocumentRepository(dbPath string) (*DocumentRepo, error) {
 
 func (r *DocumentRepo) migrate() error {
 	_, err := r.db.Exec(`
+		PRAGMA journal_mode=WAL;
 		CREATE TABLE IF NOT EXISTS documents (
 			id TEXT PRIMARY KEY,
 			title TEXT NOT NULL,
@@ -69,7 +70,7 @@ func (r *DocumentRepo) Create(ctx context.Context, doc *domain.Document) error {
 	_, err := r.db.ExecContext(ctx,
 		`INSERT INTO documents (id, title, content, tags, grupo, categoria, embedding, created_at, updated_at, accessed)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		doc.ID, doc.Title, doc.Content, string(tagsJSON), doc.Grupo, doc.Categoria, embedBlob,
+		doc.ID, doc.Title, doc.Content, string(tagsJSON), doc.Notebook, doc.Category, embedBlob,
 		doc.CreatedAt, doc.UpdatedAt, doc.Accessed,
 	)
 	return err
@@ -88,7 +89,7 @@ func (r *DocumentRepo) Update(ctx context.Context, doc *domain.Document) error {
 	_, err := r.db.ExecContext(ctx,
 		`UPDATE documents SET title=?, content=?, tags=?, grupo=?, categoria=?, embedding=?, updated_at=?, accessed=?
 		 WHERE id=?`,
-		doc.Title, doc.Content, string(tagsJSON), doc.Grupo, doc.Categoria, embedBlob,
+doc.Title, doc.Content, string(tagsJSON), doc.Notebook, doc.Category, embedBlob,
 		doc.UpdatedAt, doc.Accessed, doc.ID,
 	)
 	return err
@@ -108,7 +109,7 @@ func (r *DocumentRepo) List(ctx context.Context, filter domain.ListFilter) ([]*d
 	}
 	qry += " ORDER BY " + r.sortClause(filter.Sort)
 	if filter.Limit <= 0 {
-		filter.Limit = 20
+		filter.Limit = 40
 	}
 	qry += fmt.Sprintf(" LIMIT %d OFFSET %d", filter.Limit, filter.Offset)
 
@@ -120,9 +121,9 @@ func (r *DocumentRepo) List(ctx context.Context, filter domain.ListFilter) ([]*d
 	return r.scanDocuments(rows)
 }
 
-func (r *DocumentRepo) SearchByEmbedding(ctx context.Context, embedding []float32, tags []string, grupo string, limit int) ([]*domain.Document, error) {
+func (r *DocumentRepo) SearchByEmbedding(ctx context.Context, embedding []float32, tags []string, notebook string, limit int) ([]*domain.Document, error) {
 	if limit <= 0 {
-		limit = 20
+		limit = 40
 	}
 	qry := `SELECT id, title, content, tags, grupo, categoria, embedding, created_at, updated_at, accessed
 			FROM documents`
@@ -134,9 +135,9 @@ func (r *DocumentRepo) SearchByEmbedding(ctx context.Context, embedding []float3
 			args = append(args, `%"`+t+`"%`)
 		}
 	}
-	if grupo != "" {
+	if notebook != "" {
 		conds = append(conds, "grupo = ?")
-		args = append(args, grupo)
+		args = append(args, notebook)
 	}
 	if len(conds) > 0 {
 		qry += " WHERE " + strings.Join(conds, " AND ")
@@ -236,7 +237,7 @@ func (r *DocumentRepo) ImportMany(ctx context.Context, docs []*domain.Document) 
 		_, err := tx.ExecContext(ctx,
 			`INSERT OR REPLACE INTO documents (id, title, content, tags, grupo, categoria, embedding, created_at, updated_at, accessed)
 			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			doc.ID, doc.Title, doc.Content, string(tagsJSON), doc.Grupo, doc.Categoria, embedBlob,
+doc.ID, doc.Title, doc.Content, string(tagsJSON), doc.Notebook, doc.Category, embedBlob,
 			doc.CreatedAt, doc.UpdatedAt, doc.Accessed,
 		)
 		if err != nil {
@@ -260,13 +261,13 @@ func (r *DocumentRepo) buildWhere(f domain.ListFilter) (string, []any) {
 			args = append(args, `%"`+t+`"%`)
 		}
 	}
-	if f.Grupo != "" {
+	if f.Notebook != "" {
 		conds = append(conds, "grupo = ?")
-		args = append(args, f.Grupo)
+		args = append(args, f.Notebook)
 	}
-	if f.Categoria != "" {
+	if f.Category != "" {
 		conds = append(conds, "categoria = ?")
-		args = append(args, f.Categoria)
+		args = append(args, f.Category)
 	}
 	return strings.Join(conds, " AND "), args
 }
@@ -286,7 +287,7 @@ func (r *DocumentRepo) scanDocument(row *sql.Row) (*domain.Document, error) {
 	var doc domain.Document
 	var tagsJSON string
 	var embedBlob []byte
-	err := row.Scan(&doc.ID, &doc.Title, &doc.Content, &tagsJSON, &doc.Grupo, &doc.Categoria,
+	err := row.Scan(&doc.ID, &doc.Title, &doc.Content, &tagsJSON, &doc.Notebook, &doc.Category,
 		&embedBlob, &doc.CreatedAt, &doc.UpdatedAt, &doc.Accessed)
 	if err != nil {
 		return nil, err
@@ -302,7 +303,7 @@ func (r *DocumentRepo) scanDocuments(rows *sql.Rows) ([]*domain.Document, error)
 		var doc domain.Document
 		var tagsJSON string
 		var embedBlob []byte
-		err := rows.Scan(&doc.ID, &doc.Title, &doc.Content, &tagsJSON, &doc.Grupo, &doc.Categoria,
+		err := rows.Scan(&doc.ID, &doc.Title, &doc.Content, &tagsJSON, &doc.Notebook, &doc.Category,
 			&embedBlob, &doc.CreatedAt, &doc.UpdatedAt, &doc.Accessed)
 		if err != nil {
 			return nil, err

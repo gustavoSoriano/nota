@@ -22,8 +22,8 @@ func NewCreateUseCase(repo domain.DocumentRepository, embed domain.EmbeddingServ
 
 type CreateInput struct {
 	Tags      []string
-	Grupo     string
-	Categoria string
+	Notebook  string
+	Category  string
 	Content   string
 }
 
@@ -55,8 +55,8 @@ func (uc *CreateUseCase) Execute(ctx context.Context, in CreateInput) (*domain.D
 		ID:        uuid.New().String()[:8],
 		Content:   content,
 		Tags:      in.Tags,
-		Grupo:     in.Grupo,
-		Categoria: in.Categoria,
+		Notebook:  in.Notebook,
+		Category:  in.Category,
 		CreatedAt: now,
 		UpdatedAt: now,
 	}

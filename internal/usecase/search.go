@@ -19,7 +19,7 @@ func NewSearchUseCase(repo domain.DocumentRepository, embed domain.EmbeddingServ
 type SearchInput struct {
 	Query     string
 	Tags      []string
-	Grupo     string
+	Notebook   string
 	Limit     int
 }
 
@@ -30,7 +30,7 @@ type SearchResult struct {
 
 func (uc *SearchUseCase) Execute(ctx context.Context, in SearchInput) ([]*SearchResult, error) {
 	if in.Limit <= 0 {
-		in.Limit = 20
+		in.Limit = 40
 	}
 
 	embedding, err := uc.embed.Generate(ctx, in.Query)
@@ -38,7 +38,7 @@ func (uc *SearchUseCase) Execute(ctx context.Context, in SearchInput) ([]*Search
 		return nil, err
 	}
 
-	docs, err := uc.repo.SearchByEmbedding(ctx, embedding, in.Tags, in.Grupo, in.Limit)
+	docs, err := uc.repo.SearchByEmbedding(ctx, embedding, in.Tags, in.Notebook, in.Limit)
 	if err != nil {
 		return nil, err
 	}

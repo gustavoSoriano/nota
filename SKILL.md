@@ -9,18 +9,12 @@ Nota é um CLI de base de conhecimentos alimentado por markdown com busca semân
 - O usuário quer armazenar links, how-tos, RFCs, post-mortems, transcrições, etc.
 - Você mesmo (agente) precisa guardar ou recuperar informações do conhecimento do usuário
 
-## Comandos para agentes
+## Comandos para agentes (non-interactive)
 
-### Criar nota (sem abrir editor)
+### Criar nota
 ```bash
-nota new --content "markdown content" --tags tag1,tag2 --grupo dev --cat howto
-```
-
-### Quick capture (texto curto, link)
-```bash
-nota save "texto ou link" --tags tag1,tag2 --grupo dev
-nota save "texto" -t api -g dev
-echo "conteúdo do pipe" | nota save --tags incident
+nota new --content "markdown content" --tags tag1,tag2 --notebook dev --cat howto
+nota save "texto ou link" --tags tag1,tag2 --notebook dev
 ```
 
 ### Busca semântica (JSON)
@@ -31,7 +25,7 @@ nota search "api node" --json --tags dev --limit 10
 
 ### Abrir nota (markdown puro)
 ```bash
-nota open <id> --raw
+nota open <id>
 ```
 
 ### Editar nota (sem abrir editor, pra agentes)
@@ -43,23 +37,12 @@ nota edit <id> --content "novo conteúdo"
 ```bash
 nota list --json
 nota list --tags dev --sort recent --json
-nota list -g dev --json
+nota list -b dev --json
 ```
 
 ### Deletar nota
 ```bash
 nota delete <id> --force
-```
-
-### Importar .md
-```bash
-nota import ./pasta/ --tags dev
-nota import arquivo.md --tags readme
-```
-
-### Linkar notas
-```bash
-nota link
 ```
 
 ### Ver tags
@@ -73,6 +56,12 @@ nota backup
 nota restore <arquivo>
 ```
 
+### Interface web
+```bash
+nota serve              # sobe na :8080
+nota serve --port 3000  # porta customizada
+```
+
 ### Versão e config
 ```bash
 nota --version
@@ -82,13 +71,11 @@ nota config
 ## Flags
 
 - `-t, --tags` - tags separadas por vírgula
-- `-g, --grupo` - grupo
-- `-c, --cat` - categoria
+- `-b, --notebook` - notebook
+- `-c, --cat` - category
 - `--content` - conteúdo direto (new, edit)
 - `--json` - saída JSON (search, list, tags)
-- `--raw` - markdown puro (open)
-- `--force` - sem confirmação (delete)
-- `--limit` - máximo de resultados (search, padrão 20)
+- `--limit` - máximo de resultados (search, padrão 40)
 
 ## Formato JSON
 
@@ -99,21 +86,22 @@ nota config
 
 ### list --json
 ```json
-[{"id": "abc123", "title": "...", "tags": [...], "grupo": "...", "categoria": "...", "created_at": "...", "accessed": 3}]
+[{"id": "abc123", "title": "...", "tags": [...], "notebook": "...", "category": "...", "created_at": "...", "accessed": 3}]
 ```
 
-### open --raw
+### open
 Markdown puro no stdout.
 
 ## Workflow recomendado
 
 1. `nota search "query" --json` → encontra docs relevantes
-2. `nota open <id> --raw` → lê conteúdo completo
+2. `nota open <id>` → lê conteúdo completo
 3. `nota save "info" --tags x` → salva nova info
 4. `nota new --content "md" --tags x` → salva doc estruturado
 5. `nota edit <id> --content "novo"` → atualiza doc existente
 6. `nota delete <id> --force` → remove doc
+7. `nota serve` → interface web com editor e preview
 
 ## Requisitos
-- ollama rodando com `nomic-embed-text:latest`
+- ollama com `nomic-embed-text:latest`
 - binário `nota` no PATH

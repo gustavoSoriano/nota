@@ -100,11 +100,11 @@ func (m ViewerModel) renderMeta() string {
 	if len(m.doc.Tags) > 0 {
 		parts = append(parts, "tags: "+strings.Join(m.doc.Tags, ", "))
 	}
-	if m.doc.Grupo != "" {
-		parts = append(parts, "grupo: "+m.doc.Grupo)
+	if m.doc.Notebook != "" {
+		parts = append(parts, "notebook: "+m.doc.Notebook)
 	}
-	if m.doc.Categoria != "" {
-		parts = append(parts, "cat: "+m.doc.Categoria)
+	if m.doc.Category != "" {
+		parts = append(parts, "cat: "+m.doc.Category)
 	}
 	parts = append(parts, fmt.Sprintf("accessed: %d", m.doc.Accessed))
 	parts = append(parts, m.doc.CreatedAt.Format("2006-01-02 15:04"))

@@ -51,7 +51,7 @@ func (r *linkRepo) GetLinked(ctx context.Context, docID string) ([]*domain.Docum
 		var doc domain.Document
 		var tagsJSON string
 		var embedBlob []byte
-		if err := rows.Scan(&doc.ID, &doc.Title, &doc.Content, &tagsJSON, &doc.Grupo, &doc.Categoria,
+		if err := rows.Scan(&doc.ID, &doc.Title, &doc.Content, &tagsJSON, &doc.Notebook, &doc.Category,
 			&embedBlob, &doc.CreatedAt, &doc.UpdatedAt, &doc.Accessed); err != nil {
 			return nil, err
 		}

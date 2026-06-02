@@ -10,8 +10,8 @@ type Document struct {
 	Title      string    `json:"title"`
 	Content    string    `json:"content"`
 	Tags       []string  `json:"tags"`
-	Grupo      string    `json:"grupo,omitempty"`
-	Categoria  string    `json:"categoria,omitempty"`
+	Notebook   string    `json:"notebook,omitempty"`
+	Category   string    `json:"category,omitempty"`
 	Embedding  []float32 `json:"-"`
 	CreatedAt  time.Time `json:"created_at"`
 	UpdatedAt  time.Time `json:"updated_at"`

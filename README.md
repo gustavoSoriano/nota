@@ -16,31 +16,30 @@ Instala nota, micro editor, ollama e modelo nomic-embed-text.
 nota new                                    # abre editor
 nota new -c "conteúdo" --tags api,node      # direto no terminal
 nota save "link ou texto rápido" --tags dev  # quick capture
-nota search "api node express"              # busca semântica
-nota list                                   # lista notas recentes
-nota open                                   # fuzzy finder → visualiza
-nota edit                                   # fuzzy finder → edita
-nota delete                                 # fuzzy finder → deleta
-nota link                                   # conecta duas notas
-nota tags                                   # lista tags
-nota backup                                 # dump com timestamp
-nota restore <arquivo>                      # restaura backup
-nota clean                                  # remove tudo
-nota config                                 # mostra config
+nota search "api node express" --json        # busca semântica
+nota list --json                             # lista notas
+nota open <id>                              # ver conteúdo
+nota edit <id> -c "novo conteúdo"            # editar
+nota delete <id> --force                     # deletar
+nota link <source_id> <target_id>            # conectar notas
+nota tags --json                             # lista tags
+nota serve                                   # interface web
+nota serve --port 3000                       # porta customizada
+nota backup                                  # dump com timestamp
+nota restore <arquivo>                       # restaura backup
+nota clean                                   # remove tudo
+nota config                                  # mostra config
 ```
 
 ## Flags
 
 - `--tags tag1,tag2` - filtrar por tags
-- `--grupo nome` - filtrar por grupo
+- `--notebook nome` - filtrar por notebook
 - `--cat categoria` - filtrar por categoria
 - `--json` - saída JSON (list, search, tags)
-- `--raw` - markdown puro (open)
+- `--raw` - texto puro (list, search)
 - `--force` - sem confirmação (delete)
-
-## Agentes
-
-Comandos com `--json` e `--raw` retornam texto parseável. Skill incluída em `SKILL.md`.
+- `--limit` - máximo de resultados (search, padrão 40)
 
 ## Requisitos
 

@@ -23,7 +23,7 @@ func NewImportUseCase(repo domain.DocumentRepository, embed domain.EmbeddingServ
 type ImportInput struct {
 	Path  string
 	Tags  []string
-	Grupo string
+	Notebook string
 }
 
 func (uc *ImportUseCase) Execute(ctx context.Context, in ImportInput) ([]*domain.Document, error) {
@@ -71,7 +71,7 @@ func (uc *ImportUseCase) importFile(ctx context.Context, path string, in ImportI
 		ID:        uuid.New().String()[:8],
 		Content:   string(content),
 		Tags:      in.Tags,
-		Grupo:     in.Grupo,
+		Notebook:  in.Notebook,
 		CreatedAt: now,
 		UpdatedAt: now,
 	}

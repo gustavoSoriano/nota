@@ -31,17 +31,17 @@ func (d docItem) Description() string {
 	if len(d.doc.Tags) > 0 {
 		meta += strings.Join(d.doc.Tags, ", ")
 	}
-	if d.doc.Grupo != "" {
+	if d.doc.Notebook != "" {
 		if meta != "" {
 			meta += " · "
 		}
-		meta += d.doc.Grupo
+		meta += d.doc.Notebook
 	}
-	if d.doc.Categoria != "" {
+	if d.doc.Category != "" {
 		if meta != "" {
 			meta += " · "
 		}
-		meta += d.doc.Categoria
+		meta += d.doc.Category
 	}
 	preview := truncate(d.doc.Content, 60)
 	return fmt.Sprintf("%s  %s", tagStyle.Render(meta), dimStyle.Render(preview))

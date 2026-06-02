@@ -8,19 +8,20 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"text/tabwriter"
 
 	"github.com/spf13/cobra"
 	"github.com/soriano/nota/internal/domain"
 	"github.com/soriano/nota/internal/infra/editor"
 	"github.com/soriano/nota/internal/infra/ollama"
 	"github.com/soriano/nota/internal/infra/sqlite"
-	"github.com/soriano/nota/internal/tui"
+	"github.com/soriano/nota/internal/server"
 	"github.com/soriano/nota/internal/usecase"
 )
 
 var (
 	tagsFlag    []string
-	grupoFlag   string
+	notebookFlag string
 	catFlag     string
 	contentFlag string
 	sortFlag    string
@@ -57,7 +58,7 @@ func NewRootCmd() *cobra.Command {
 	}
 
 	root.PersistentFlags().StringSliceVarP(&tagsFlag, "tags", "t", nil, "tags (comma-separated)")
-	root.PersistentFlags().StringVarP(&grupoFlag, "grupo", "g", "", "group")
+	root.PersistentFlags().StringVarP(&notebookFlag, "notebook", "b", "", "notebook")
 	root.PersistentFlags().StringVarP(&catFlag, "cat", "c", "", "category")
 
 	root.AddCommand(newCmd())
@@ -74,6 +75,7 @@ func NewRootCmd() *cobra.Command {
 	root.AddCommand(cleanCmd())
 	root.AddCommand(configCmd())
 	root.AddCommand(setupCmd())
+	root.AddCommand(serveCmd())
 
 	return root
 }
@@ -121,8 +123,8 @@ func newCmd() *cobra.Command {
 		uc := usecase.NewCreateUseCase(app.docRepo, app.embed, app.config.Editor)
 		doc, err := uc.Execute(context.Background(), usecase.CreateInput{
 			Tags:      tagsFlag,
-			Grupo:     grupoFlag,
-			Categoria: catFlag,
+			Notebook:  notebookFlag,
+			Category:  catFlag,
 			Content:   contentFlag,
 		})
 		if err != nil {
@@ -168,8 +170,8 @@ func saveCmd() *cobra.Command {
 			doc, err := uc.Execute(context.Background(), usecase.SaveInput{
 				Content:   content,
 				Tags:      tagsFlag,
-				Grupo:     grupoFlag,
-				Categoria: catFlag,
+				Notebook:  notebookFlag,
+				Category:  catFlag,
 			})
 			if err != nil {
 				return err
@@ -221,131 +223,54 @@ func editCmd() *cobra.Command {
 			return nil
 		}
 
-		docs, err := app.docRepo.List(ctx, domain.ListFilter{Limit: 100})
-		if err != nil {
-			return err
-		}
-		if len(docs) == 0 {
-			fmt.Println("No notes found")
-			return nil
-		}
-		selected, err := tui.RunFuzzyPicker(docs, "Edit")
-		if err != nil || selected == nil {
-			return err
-		}
-		uc := usecase.NewEditUseCase(app.docRepo, app.embed, app.config.Editor)
-		if err := uc.Execute(ctx, selected.ID); err != nil {
-			return err
-		}
-		fmt.Printf("Updated: %s\n", selected.Title)
-		return nil
+		return fmt.Errorf("provide an id: nota edit <id> --content \"...\" or use nota serve")
 	}
 	return cmd
 }
 
 func openCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "open [id]",
-		Short: "Open and view a note",
+		Use:     "open [id]",
+		Short:   "Open and view a note",
 		Aliases: []string{"o"},
 	}
 	cmd.Flags().BoolVar(&rawFlag, "raw", false, "output raw markdown")
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		if len(args) == 0 {
+			return fmt.Errorf("provide an id: nota open <id> --raw or use nota serve")
+		}
 		app, err := ensureSetup()
 		if err != nil {
 			return err
 		}
-		ctx := context.Background()
-
-		if len(args) > 0 {
-			uc := usecase.NewOpenUseCase(app.docRepo)
-			doc, err := uc.Execute(ctx, args[0])
-			if err != nil {
-				return err
-			}
-			if rawFlag {
-				fmt.Println(doc.Content)
-				return nil
-			}
-			linked, _ := app.linkRepo.GetLinked(ctx, doc.ID)
-			action, err := tui.RunViewer(doc, linked)
-			if err != nil {
-				return err
-			}
-			return handleAction(action, doc.ID, app)
-		}
-
-		docs, err := app.docRepo.List(ctx, domain.ListFilter{Limit: 100})
-		if err != nil {
-			return err
-		}
-		selected, err := tui.RunFuzzyPicker(docs, "Open")
-		if err != nil || selected == nil {
-			return err
-		}
 		uc := usecase.NewOpenUseCase(app.docRepo)
-		doc, err := uc.Execute(ctx, selected.ID)
+		doc, err := uc.Execute(context.Background(), args[0])
 		if err != nil {
 			return err
 		}
-		if rawFlag {
-			fmt.Println(doc.Content)
-			return nil
-		}
-		linked, _ := app.linkRepo.GetLinked(ctx, doc.ID)
-		action, err := tui.RunViewer(doc, linked)
-		if err != nil {
-			return err
-		}
-		return handleAction(action, doc.ID, app)
+		fmt.Println(doc.Content)
+		return nil
 	}
 	return cmd
 }
 
 func deleteCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "delete [id]",
-		Short: "Delete a note",
+		Use:     "delete [id]",
+		Short:   "Delete a note",
 		Aliases: []string{"d"},
 	}
-	cmd.Flags().BoolVar(&forceFlag, "force", false, "skip confirmation and fuzzy finder")
+	cmd.Flags().BoolVar(&forceFlag, "force", false, "skip confirmation")
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		if len(args) == 0 {
+			return fmt.Errorf("provide an id: nota delete <id> --force or use nota serve")
+		}
 		app, err := ensureSetup()
 		if err != nil {
 			return err
 		}
-		ctx := context.Background()
-
-		if forceFlag && len(args) > 0 {
-			uc := usecase.NewDeleteUseCase(app.docRepo)
-			return uc.Execute(ctx, args[0])
-		}
-
-		var id string
-		if len(args) > 0 {
-			id = args[0]
-		} else {
-			docs, err := app.docRepo.List(ctx, domain.ListFilter{Limit: 100})
-			if err != nil {
-				return err
-			}
-			selected, err := tui.RunFuzzyPicker(docs, "Delete")
-			if err != nil || selected == nil {
-				return err
-			}
-			id = selected.ID
-		}
-
-		fmt.Printf("Delete note %s? [y/N] ", id)
-		var confirm string
-		fmt.Scanln(&confirm)
-		if strings.ToLower(confirm) != "y" {
-			fmt.Println("Cancelled")
-			return nil
-		}
-
 		uc := usecase.NewDeleteUseCase(app.docRepo)
-		return uc.Execute(ctx, id)
+		return uc.Execute(context.Background(), args[0])
 	}
 	return cmd
 }
@@ -358,6 +283,7 @@ func listCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&sortFlag, "sort", "recent", "sort order: recent, accessed, alpha")
 	cmd.Flags().BoolVar(&jsonFlag, "json", false, "output as JSON")
+	cmd.Flags().BoolVar(&rawFlag, "raw", false, "output plain text table")
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		app, err := ensureSetup()
 		if err != nil {
@@ -366,10 +292,10 @@ func listCmd() *cobra.Command {
 		uc := usecase.NewListUseCase(app.docRepo)
 		docs, err := uc.Execute(context.Background(), usecase.ListInput{
 			Tags:      tagsFlag,
-			Grupo:     grupoFlag,
-			Categoria: catFlag,
+			Notebook:  notebookFlag,
+			Category:  catFlag,
 			Sort:      sortFlag,
-			Limit:     20,
+			Limit:     40,
 		})
 		if err != nil {
 			return err
@@ -383,22 +309,7 @@ func listCmd() *cobra.Command {
 			fmt.Println("No notes found")
 			return nil
 		}
-		for _, d := range docs {
-			tags := strings.Join(d.Tags, ", ")
-			meta := ""
-			if tags != "" {
-				meta += " · " + tags
-			}
-			if d.Grupo != "" {
-				meta += " · " + d.Grupo
-			}
-			fmt.Printf("  %s  %s%s  %s\n",
-				fmt.Sprintf("%-8s", d.ID),
-				d.Title,
-				meta,
-				d.CreatedAt.Format("2006-01-02"),
-			)
-		}
+		printDocTable(docs)
 		return nil
 	}
 	return cmd
@@ -406,13 +317,14 @@ func listCmd() *cobra.Command {
 
 func searchCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "search [query]",
-		Short: "Semantic search notes",
+		Use:     "search [query]",
+		Short:   "Semantic search notes",
 		Aliases: []string{"s"},
-		Args:  cobra.MinimumNArgs(1),
+		Args:    cobra.MinimumNArgs(1),
 	}
 	cmd.Flags().BoolVar(&jsonFlag, "json", false, "output as JSON")
-	cmd.Flags().IntVar(&limitFlag, "limit", 20, "max results")
+	cmd.Flags().BoolVar(&rawFlag, "raw", false, "output plain text table")
+	cmd.Flags().IntVar(&limitFlag, "limit", 40, "max results")
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		app, err := ensureSetup()
 		if err != nil {
@@ -423,7 +335,7 @@ func searchCmd() *cobra.Command {
 		results, err := uc.Execute(context.Background(), usecase.SearchInput{
 			Query: query,
 			Tags:  tagsFlag,
-			Grupo: grupoFlag,
+			Notebook: notebookFlag,
 			Limit: limitFlag,
 		})
 		if err != nil {
@@ -431,9 +343,9 @@ func searchCmd() *cobra.Command {
 		}
 		if jsonFlag {
 			type jsonResult struct {
-				ID    string  `json:"id"`
-				Title string  `json:"title"`
-				Score float32 `json:"score"`
+				ID    string   `json:"id"`
+				Title string   `json:"title"`
+				Score float32  `json:"score"`
 				Tags  []string `json:"tags"`
 			}
 			var jr []jsonResult
@@ -451,54 +363,27 @@ func searchCmd() *cobra.Command {
 			fmt.Println("No results found")
 			return nil
 		}
-		selected, err := tui.RunSearchTUI(results, query)
-		if err != nil || selected == nil {
-			return err
-		}
-		openUC := usecase.NewOpenUseCase(app.docRepo)
-		doc, err := openUC.Execute(context.Background(), selected.Document.ID)
-		if err != nil {
-			return err
-		}
-		linked, _ := app.linkRepo.GetLinked(context.Background(), doc.ID)
-		action, err := tui.RunViewer(doc, linked)
-		if err != nil {
-			return err
-		}
-		return handleAction(action, doc.ID, app)
+		printSearchTable(results)
+		return nil
 	}
 	return cmd
 }
 
 func linkCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "link",
+		Use:   "link <source_id> <target_id>",
 		Short: "Link two notes together",
+		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app, err := ensureSetup()
 			if err != nil {
 				return err
 			}
-			ctx := context.Background()
-			docs, err := app.docRepo.List(ctx, domain.ListFilter{Limit: 100})
-			if err != nil {
-				return err
-			}
-			fmt.Println("Select source note:")
-			source, err := tui.RunFuzzyPicker(docs, "Link Source")
-			if err != nil || source == nil {
-				return err
-			}
-			fmt.Println("Select target note:")
-			target, err := tui.RunFuzzyPicker(docs, "Link Target")
-			if err != nil || target == nil {
-				return err
-			}
 			uc := usecase.NewLinkUseCase(app.docRepo, app.linkRepo)
-			if err := uc.Execute(ctx, source.ID, target.ID); err != nil {
+			if err := uc.Execute(context.Background(), args[0], args[1]); err != nil {
 				return err
 			}
-			fmt.Printf("Linked: %s <-> %s\n", source.Title, target.Title)
+			fmt.Printf("Linked: %s <-> %s\n", args[0], args[1])
 			return nil
 		},
 	}
@@ -631,6 +516,24 @@ func setupCmd() *cobra.Command {
 	}
 }
 
+func serveCmd() *cobra.Command {
+	var port string
+	cmd := &cobra.Command{
+		Use:   "serve",
+		Short: "Start web interface",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			app, err := ensureSetup()
+			if err != nil {
+				return err
+			}
+			srv := server.New(app.docRepo, app.linkRepo, app.embed, server.StaticFS)
+			return srv.Start(":" + port)
+		},
+	}
+	cmd.Flags().StringVar(&port, "port", "8080", "server port")
+	return cmd
+}
+
 func handleAction(action, docID string, app *App) error {
 	ctx := context.Background()
 	switch action {
@@ -642,6 +545,39 @@ func handleAction(action, docID string, app *App) error {
 		return uc.Execute(ctx, docID)
 	}
 	return nil
+}
+
+func printDocTable(docs []*domain.Document) {
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "ID\tTITLE\tTAGS\tNOTEBOOK\tDATA")
+	fmt.Fprintln(w, "--\t-----\t----\t--------\t----")
+	for _, d := range docs {
+		tags := strings.Join(d.Tags, ", ")
+		title := d.Title
+		if len(title) > 50 {
+			title = title[:47] + "..."
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
+			d.ID, title, tags, d.Notebook, d.CreatedAt.Format("2006-01-02"))
+	}
+	w.Flush()
+}
+
+func printSearchTable(results []*usecase.SearchResult) {
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "ID\tSCORE\tTITLE\tTAGS\tDATA")
+	fmt.Fprintln(w, "--\t-----\t-----\t----\t----")
+	for _, r := range results {
+		d := r.Document
+		tags := strings.Join(d.Tags, ", ")
+		title := d.Title
+		if len(title) > 50 {
+			title = title[:47] + "..."
+		}
+		fmt.Fprintf(w, "%s\t%d%%\t%s\t%s\t%s\n",
+			d.ID, int(r.Score*100), title, tags, d.CreatedAt.Format("2006-01-02"))
+	}
+	w.Flush()
 }
 
 func runSetup(ctx context.Context, storagePath string) error {
