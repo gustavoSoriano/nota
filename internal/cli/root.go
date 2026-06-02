@@ -530,7 +530,7 @@ func serveCmd() *cobra.Command {
 			return srv.Start(":" + port)
 		},
 	}
-	cmd.Flags().StringVar(&port, "port", "8080", "server port")
+	cmd.Flags().StringVar(&port, "port", "3003", "server port")
 	return cmd
 }
 
