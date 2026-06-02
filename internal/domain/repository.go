@@ -2,13 +2,19 @@ package domain
 
 import "context"
 
+type ScoredDocument struct {
+	Document *Document
+	Score    float32
+}
+
 type DocumentRepository interface {
 	Create(ctx context.Context, doc *Document) error
 	GetByID(ctx context.Context, id string) (*Document, error)
 	Update(ctx context.Context, doc *Document) error
 	Delete(ctx context.Context, id string) error
 	List(ctx context.Context, filter ListFilter) ([]*Document, error)
-	SearchByEmbedding(ctx context.Context, embedding []float32, tags []string, notebook string, limit int) ([]*Document, error)
+	SearchByEmbedding(ctx context.Context, embedding []float32, tags []string, notebook string, limit int) ([]ScoredDocument, error)
+	SearchByText(ctx context.Context, query string, tags []string, notebook string, limit int) ([]ScoredDocument, error)
 	IncrementAccessed(ctx context.Context, id string) error
 	GetAllTags(ctx context.Context) (map[string]int, error)
 	DeleteAll(ctx context.Context) error

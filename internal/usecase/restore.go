@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/soriano/nota/internal/domain"
 )
@@ -40,14 +41,23 @@ func (uc *RestoreUseCase) Execute(ctx context.Context, filePath string) error {
 
 	docs := make([]*domain.Document, len(backup))
 	for i, b := range backup {
+		var createdAt, updatedAt time.Time
+		if t, err := time.Parse(time.RFC3339, b.CreatedAt); err == nil {
+			createdAt = t
+		}
+		if t, err := time.Parse(time.RFC3339, b.UpdatedAt); err == nil {
+			updatedAt = t
+		}
 		docs[i] = &domain.Document{
-			ID:       b.ID,
-			Title:    b.Title,
-			Content:  b.Content,
-			Tags:     b.Tags,
+			ID:        b.ID,
+			Title:     b.Title,
+			Content:   b.Content,
+			Tags:      b.Tags,
 			Notebook:  b.Notebook,
 			Category:  b.Category,
-			Accessed: b.Accessed,
+			CreatedAt: createdAt,
+			UpdatedAt: updatedAt,
+			Accessed:  b.Accessed,
 		}
 	}
 

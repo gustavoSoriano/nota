@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
 	"math"
 	"os"
 	"path/filepath"
@@ -17,7 +18,8 @@ import (
 )
 
 type DocumentRepo struct {
-	db *sql.DB
+	db     *sql.DB
+	useFTS bool
 }
 
 func NewDocumentRepository(dbPath string) (*DocumentRepo, error) {
@@ -61,7 +63,49 @@ func (r *DocumentRepo) migrate() error {
 		CREATE INDEX IF NOT EXISTS idx_docs_categoria ON documents(categoria);
 		CREATE INDEX IF NOT EXISTS idx_docs_created ON documents(created_at DESC);
 	`)
-	return err
+	if err != nil {
+		return err
+	}
+
+	_, ftsErr := r.db.Exec(`
+		CREATE VIRTUAL TABLE IF NOT EXISTS docs_fts USING fts5(
+			doc_id UNINDEXED,
+			title,
+			content,
+			tokenize='unicode61'
+		)
+	`)
+	if ftsErr != nil {
+		log.Printf("[nota] FTS5 unavailable, using LIKE fallback: %v", ftsErr)
+		r.useFTS = false
+	} else {
+		r.useFTS = true
+		r.rebuildFTS(context.Background())
+	}
+	return nil
+}
+
+func (r *DocumentRepo) syncFTS(ctx context.Context, docID, title, content string) {
+	if !r.useFTS {
+		return
+	}
+	r.db.ExecContext(ctx, `DELETE FROM docs_fts WHERE doc_id = ?`, docID)
+	r.db.ExecContext(ctx, `INSERT INTO docs_fts (doc_id, title, content) VALUES (?, ?, ?)`, docID, title, content)
+}
+
+func (r *DocumentRepo) deleteFTS(ctx context.Context, docID string) {
+	if !r.useFTS {
+		return
+	}
+	r.db.ExecContext(ctx, `DELETE FROM docs_fts WHERE doc_id = ?`, docID)
+}
+
+func (r *DocumentRepo) rebuildFTS(ctx context.Context) {
+	if !r.useFTS {
+		return
+	}
+	r.db.ExecContext(ctx, `DELETE FROM docs_fts`)
+	r.db.ExecContext(ctx, `INSERT INTO docs_fts (doc_id, title, content) SELECT id, title, content FROM documents`)
 }
 
 func (r *DocumentRepo) Create(ctx context.Context, doc *domain.Document) error {
@@ -73,6 +117,9 @@ func (r *DocumentRepo) Create(ctx context.Context, doc *domain.Document) error {
 		doc.ID, doc.Title, doc.Content, string(tagsJSON), doc.Notebook, doc.Category, embedBlob,
 		doc.CreatedAt, doc.UpdatedAt, doc.Accessed,
 	)
+	if err == nil {
+		r.syncFTS(ctx, doc.ID, doc.Title, doc.Content)
+	}
 	return err
 }
 
@@ -92,11 +139,17 @@ func (r *DocumentRepo) Update(ctx context.Context, doc *domain.Document) error {
 doc.Title, doc.Content, string(tagsJSON), doc.Notebook, doc.Category, embedBlob,
 		doc.UpdatedAt, doc.Accessed, doc.ID,
 	)
+	if err == nil {
+		r.syncFTS(ctx, doc.ID, doc.Title, doc.Content)
+	}
 	return err
 }
 
 func (r *DocumentRepo) Delete(ctx context.Context, id string) error {
 	_, err := r.db.ExecContext(ctx, `DELETE FROM documents WHERE id = ?`, id)
+	if err == nil {
+		r.deleteFTS(ctx, id)
+	}
 	return err
 }
 
@@ -121,7 +174,7 @@ func (r *DocumentRepo) List(ctx context.Context, filter domain.ListFilter) ([]*d
 	return r.scanDocuments(rows)
 }
 
-func (r *DocumentRepo) SearchByEmbedding(ctx context.Context, embedding []float32, tags []string, notebook string, limit int) ([]*domain.Document, error) {
+func (r *DocumentRepo) SearchByEmbedding(ctx context.Context, embedding []float32, tags []string, notebook string, limit int) ([]domain.ScoredDocument, error) {
 	if limit <= 0 {
 		limit = 40
 	}
@@ -155,29 +208,188 @@ func (r *DocumentRepo) SearchByEmbedding(ctx context.Context, embedding []float3
 		return nil, err
 	}
 
-	type scored struct {
-		doc    *domain.Document
-		score  float32
-	}
-	var results []scored
+	var results []domain.ScoredDocument
 	for _, d := range docs {
 		if len(d.Embedding) == 0 {
 			continue
 		}
 		s := cosineSimilarity(embedding, d.Embedding)
-		results = append(results, scored{doc: d, score: s})
+		results = append(results, domain.ScoredDocument{Document: d, Score: s})
 	}
 	sort.Slice(results, func(i, j int) bool {
-		return results[i].score > results[j].score
+		return results[i].Score > results[j].Score
 	})
 	if len(results) > limit {
 		results = results[:limit]
 	}
-	out := make([]*domain.Document, len(results))
-	for i, r := range results {
-		out[i] = r.doc
+	return results, nil
+}
+
+func (r *DocumentRepo) SearchByText(ctx context.Context, query string, tags []string, notebook string, limit int) ([]domain.ScoredDocument, error) {
+	if limit <= 0 {
+		limit = 40
 	}
-	return out, nil
+	if r.useFTS {
+		return r.searchByTextFTS(ctx, query, tags, notebook, limit)
+	}
+	return r.searchByTextLike(ctx, query, tags, notebook, limit)
+}
+
+func (r *DocumentRepo) searchByTextFTS(ctx context.Context, query string, tags []string, notebook string, limit int) ([]domain.ScoredDocument, error) {
+	ftsQuery := toFTSQuery(query)
+	if ftsQuery == "" {
+		return r.searchByTextLike(ctx, query, tags, notebook, limit)
+	}
+
+	qry := `
+		SELECT d.id, d.title, d.content, d.tags, d.grupo, d.categoria, d.embedding, d.created_at, d.updated_at, d.accessed,
+			   rank
+		FROM docs_fts
+		JOIN documents d ON d.id = docs_fts.doc_id
+		WHERE docs_fts MATCH ?
+	`
+	var conds []string
+	var args []any
+	args = append(args, ftsQuery)
+
+	if len(tags) > 0 {
+		for _, t := range tags {
+			conds = append(conds, "d.tags LIKE ?")
+			args = append(args, `%"`+t+`"%`)
+		}
+	}
+	if notebook != "" {
+		conds = append(conds, "d.grupo = ?")
+		args = append(args, notebook)
+	}
+	if len(conds) > 0 {
+		qry += " AND " + strings.Join(conds, " AND ")
+	}
+
+	qry += " ORDER BY rank LIMIT ?"
+	args = append(args, limit)
+
+	rows, err := r.db.QueryContext(ctx, qry, args...)
+	if err != nil {
+		return r.searchByTextLike(ctx, query, tags, notebook, limit)
+	}
+	defer rows.Close()
+
+	var results []domain.ScoredDocument
+	for rows.Next() {
+		var doc domain.Document
+		var tagsJSON string
+		var embedBlob []byte
+		var rank float64
+		err := rows.Scan(&doc.ID, &doc.Title, &doc.Content, &tagsJSON, &doc.Notebook, &doc.Category,
+			&embedBlob, &doc.CreatedAt, &doc.UpdatedAt, &doc.Accessed, &rank)
+		if err != nil {
+			return nil, err
+		}
+		json.Unmarshal([]byte(tagsJSON), &doc.Tags)
+		doc.Embedding = blobToFloat32(embedBlob)
+		score := float32(1.0 / (1.0 + math.Abs(rank)))
+		results = append(results, domain.ScoredDocument{Document: &doc, Score: score})
+	}
+	if len(results) == 0 {
+		return r.searchByTextLike(ctx, query, tags, notebook, limit)
+	}
+	return results, nil
+}
+
+func toFTSQuery(s string) string {
+	words := strings.Fields(s)
+	for i, w := range words {
+		w = strings.Map(func(r rune) rune {
+			if r == '"' || r == '(' || r == ')' || r == '^' {
+				return -1
+			}
+			return r
+		}, w)
+		if len(w) > 0 {
+			w = w + "*"
+		}
+		words[i] = w
+	}
+	return strings.Join(words, " ")
+}
+
+func (r *DocumentRepo) searchByTextLike(ctx context.Context, query string, tags []string, notebook string, limit int) ([]domain.ScoredDocument, error) {
+	words := strings.Fields(query)
+	qry := `SELECT id, title, content, tags, grupo, categoria, embedding, created_at, updated_at, accessed FROM documents WHERE 1=1`
+	var conds []string
+	var args []any
+
+	for _, w := range words {
+		conds = append(conds, "(title LIKE ? OR content LIKE ?)")
+		args = append(args, `%`+w+`%`, `%`+w+`%`)
+	}
+
+	if len(tags) > 0 {
+		for _, t := range tags {
+			conds = append(conds, "tags LIKE ?")
+			args = append(args, `%"`+t+`"%`)
+		}
+	}
+	if notebook != "" {
+		conds = append(conds, "grupo = ?")
+		args = append(args, notebook)
+	}
+
+	if len(conds) > 0 {
+		qry += " AND " + strings.Join(conds, " AND ")
+	}
+
+	qry += " ORDER BY created_at DESC LIMIT ?"
+	args = append(args, limit)
+
+	rows, err := r.db.QueryContext(ctx, qry, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	docs, err := r.scanDocuments(rows)
+	if err != nil {
+		return nil, err
+	}
+
+	var results []domain.ScoredDocument
+	for _, d := range docs {
+		score := scoreKeywordMatch(d, words)
+		results = append(results, domain.ScoredDocument{Document: d, Score: score})
+	}
+
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].Score > results[j].Score
+	})
+	if len(results) > limit {
+		results = results[:limit]
+	}
+	return results, nil
+}
+
+func scoreKeywordMatch(doc *domain.Document, words []string) float32 {
+	title := strings.ToLower(doc.Title)
+	content := strings.ToLower(doc.Content)
+	var score float32
+	for _, w := range words {
+		w = strings.ToLower(w)
+		if w == "" {
+			continue
+		}
+		titleCount := float32(strings.Count(title, w))
+		contentCount := float32(strings.Count(content, w))
+		if titleCount > 0 {
+			score += titleCount*5 + contentCount
+		} else if contentCount > 0 {
+			score += contentCount
+		}
+	}
+	if score > 100 {
+		score = 100
+	}
+	return score / 100
 }
 
 func (r *DocumentRepo) IncrementAccessed(ctx context.Context, id string) error {
@@ -212,6 +424,12 @@ func (r *DocumentRepo) DeleteAll(ctx context.Context) error {
 		return err
 	}
 	_, err = r.db.ExecContext(ctx, `DELETE FROM documents`)
+	if err != nil {
+		return err
+	}
+	if r.useFTS {
+		_, err = r.db.ExecContext(ctx, `DELETE FROM docs_fts`)
+	}
 	return err
 }
 
@@ -245,7 +463,13 @@ doc.ID, doc.Title, doc.Content, string(tagsJSON), doc.Notebook, doc.Category, em
 			return err
 		}
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	if r.useFTS {
+		r.rebuildFTS(ctx)
+	}
+	return nil
 }
 
 func (r *DocumentRepo) DB() *sql.DB {

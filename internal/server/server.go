@@ -38,11 +38,22 @@ func New(docRepo domain.DocumentRepository, linkRepo domain.DocumentLinkReposito
 func (s *Server) Start(addr string) error {
 	mux := http.NewServeMux()
 
-	sub, err := fs.Sub(s.static, "static")
-	if err != nil {
-		return fmt.Errorf("static files: %w", err)
+	staticDirs := []string{"internal/server/static", "static"}
+	var staticHandler http.Handler
+	for _, d := range staticDirs {
+		if fi, err := os.Stat(d); err == nil && fi.IsDir() {
+			staticHandler = http.FileServer(http.Dir(d))
+			break
+		}
 	}
-	mux.Handle("/", http.FileServer(http.FS(sub)))
+	if staticHandler == nil {
+		sub, err := fs.Sub(s.static, "static")
+		if err != nil {
+			return fmt.Errorf("static files: %w", err)
+		}
+		staticHandler = http.FileServer(http.FS(sub))
+	}
+	mux.Handle("/", staticHandler)
 
 	mux.HandleFunc("GET /api/notes", s.handleListNotes)
 	mux.HandleFunc("GET /api/notes/", s.handleGetNote)
@@ -310,6 +321,7 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 		ID        string   `json:"id"`
 		Title     string   `json:"title"`
 		Preview   string   `json:"preview"`
+		Snippet   string   `json:"snippet"`
 		Tags      []string `json:"tags"`
 		Score     float32  `json:"score"`
 		CreatedAt string   `json:"created_at"`
@@ -325,7 +337,7 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 		}
 		items[i] = searchItem{
 			ID: d.ID, Title: d.Title, Preview: preview,
-			Tags: d.Tags, Score: r.Score,
+			Snippet: r.Snippet, Tags: d.Tags, Score: r.Score,
 			CreatedAt: d.CreatedAt.Format(time.RFC3339),
 		}
 	}

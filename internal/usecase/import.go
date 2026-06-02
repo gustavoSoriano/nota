@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/soriano/nota/internal/domain"
@@ -66,14 +65,18 @@ func (uc *ImportUseCase) importFile(ctx context.Context, path string, in ImportI
 	if err != nil {
 		return nil, err
 	}
-	now := time.Now()
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, err
+	}
+	modTime := info.ModTime()
 	doc := &domain.Document{
 		ID:        uuid.New().String()[:8],
 		Content:   string(content),
 		Tags:      in.Tags,
 		Notebook:  in.Notebook,
-		CreatedAt: now,
-		UpdatedAt: now,
+		CreatedAt: modTime,
+		UpdatedAt: modTime,
 	}
 	doc.Title = doc.ExtractTitle()
 
