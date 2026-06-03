@@ -13,22 +13,21 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/soriano/nota/internal/domain"
 	"github.com/soriano/nota/internal/infra/editor"
-	"github.com/soriano/nota/internal/infra/ollama"
 	"github.com/soriano/nota/internal/infra/sqlite"
 	"github.com/soriano/nota/internal/server"
 	"github.com/soriano/nota/internal/usecase"
 )
 
 var (
-	tagsFlag    []string
+	tagsFlag     []string
 	notebookFlag string
-	catFlag     string
-	contentFlag string
-	sortFlag    string
-	limitFlag   int
-	jsonFlag    bool
-	rawFlag     bool
-	forceFlag   bool
+	catFlag      string
+	contentFlag  string
+	sortFlag     string
+	limitFlag    int
+	jsonFlag     bool
+	rawFlag      bool
+	forceFlag    bool
 )
 
 var Version = "dev"
@@ -41,18 +40,17 @@ func init() {
 }
 
 type App struct {
-	docRepo   domain.DocumentRepository
-	linkRepo  domain.DocumentLinkRepository
-	config    *domain.Config
-	embed     domain.EmbeddingService
-	docDB     *sqlite.DocumentRepo
+	docRepo  domain.DocumentRepository
+	linkRepo domain.DocumentLinkRepository
+	config   *domain.Config
+	docDB    *sqlite.DocumentRepo
 }
 
 func NewRootCmd() *cobra.Command {
 	root := &cobra.Command{
 		Use:          "nota",
 		Short:        "CLI Knowledge Base powered by markdown",
-		Long:         "Nota is a CLI tool for storing and searching markdown notes with semantic search.",
+		Long:         "Nota is a CLI tool for storing and searching markdown notes.",
 		Version:      Version,
 		SilenceUsage: true,
 	}
@@ -76,6 +74,7 @@ func NewRootCmd() *cobra.Command {
 	root.AddCommand(configCmd())
 	root.AddCommand(setupCmd())
 	root.AddCommand(serveCmd())
+	root.AddCommand(updateCmd())
 
 	return root
 }
@@ -101,13 +100,11 @@ func ensureSetup() (*App, error) {
 	}
 
 	linkRepo := sqlite.NewLinkRepository(docRepo.DB())
-	embedSvc := ollama.New(cfg.OllamaURL, cfg.OllamaModel)
 
 	return &App{
 		docRepo:  docRepo,
 		linkRepo: linkRepo,
 		config:   cfg,
-		embed:    embedSvc,
 		docDB:    docRepo,
 	}, nil
 }
@@ -120,12 +117,12 @@ func newCmd() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		uc := usecase.NewCreateUseCase(app.docRepo, app.embed, app.config.Editor)
+		uc := usecase.NewCreateUseCase(app.docRepo, app.config.Editor)
 		doc, err := uc.Execute(context.Background(), usecase.CreateInput{
-			Tags:      tagsFlag,
-			Notebook:  notebookFlag,
-			Category:  catFlag,
-			Content:   contentFlag,
+			Tags:     tagsFlag,
+			Notebook: notebookFlag,
+			Category: catFlag,
+			Content:  contentFlag,
 		})
 		if err != nil {
 			return err
@@ -166,12 +163,12 @@ func saveCmd() *cobra.Command {
 				return fmt.Errorf("provide text argument or pipe content: nota save \"text\" or echo \"text\" | nota save")
 			}
 
-			uc := usecase.NewSaveUseCase(app.docRepo, app.embed)
+			uc := usecase.NewSaveUseCase(app.docRepo)
 			doc, err := uc.Execute(context.Background(), usecase.SaveInput{
-				Content:   content,
-				Tags:      tagsFlag,
-				Notebook:  notebookFlag,
-				Category:  catFlag,
+				Content:  content,
+				Tags:     tagsFlag,
+				Notebook: notebookFlag,
+				Category: catFlag,
 			})
 			if err != nil {
 				return err
@@ -203,10 +200,6 @@ func editCmd() *cobra.Command {
 			}
 			doc.Content = contentFlag
 			doc.Title = doc.ExtractTitle()
-			embedding, err := app.embed.Generate(ctx, contentFlag)
-			if err == nil {
-				doc.Embedding = embedding
-			}
 			if err := app.docRepo.Update(ctx, doc); err != nil {
 				return err
 			}
@@ -215,7 +208,7 @@ func editCmd() *cobra.Command {
 		}
 
 		if len(args) > 0 {
-			uc := usecase.NewEditUseCase(app.docRepo, app.embed, app.config.Editor)
+			uc := usecase.NewEditUseCase(app.docRepo, app.config.Editor)
 			if err := uc.Execute(ctx, args[0]); err != nil {
 				return err
 			}
@@ -277,8 +270,8 @@ func deleteCmd() *cobra.Command {
 
 func listCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "list",
-		Short: "List notes",
+		Use:     "list",
+		Short:   "List notes",
 		Aliases: []string{"ls"},
 	}
 	cmd.Flags().StringVar(&sortFlag, "sort", "recent", "sort order: recent, accessed, alpha")
@@ -291,11 +284,11 @@ func listCmd() *cobra.Command {
 		}
 		uc := usecase.NewListUseCase(app.docRepo)
 		docs, err := uc.Execute(context.Background(), usecase.ListInput{
-			Tags:      tagsFlag,
-			Notebook:  notebookFlag,
-			Category:  catFlag,
-			Sort:      sortFlag,
-			Limit:     40,
+			Tags:     tagsFlag,
+			Notebook: notebookFlag,
+			Category: catFlag,
+			Sort:     sortFlag,
+			Limit:    40,
 		})
 		if err != nil {
 			return err
@@ -318,7 +311,7 @@ func listCmd() *cobra.Command {
 func searchCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "search [query]",
-		Short:   "Semantic search notes",
+		Short:   "Search notes by text, tags, notebook and category",
 		Aliases: []string{"s"},
 		Args:    cobra.MinimumNArgs(1),
 	}
@@ -331,28 +324,37 @@ func searchCmd() *cobra.Command {
 			return err
 		}
 		query := strings.Join(args, " ")
-		uc := usecase.NewSearchUseCase(app.docRepo, app.embed)
+		uc := usecase.NewSearchUseCase(app.docRepo)
 		results, err := uc.Execute(context.Background(), usecase.SearchInput{
-			Query: query,
-			Tags:  tagsFlag,
+			Query:    query,
+			Tags:     tagsFlag,
 			Notebook: notebookFlag,
-			Limit: limitFlag,
+			Category: catFlag,
+			Limit:    limitFlag,
 		})
 		if err != nil {
 			return err
 		}
 		if jsonFlag {
 			type jsonResult struct {
-				ID    string   `json:"id"`
-				Title string   `json:"title"`
-				Score float32  `json:"score"`
-				Tags  []string `json:"tags"`
+				ID       string   `json:"id"`
+				Title    string   `json:"title"`
+				Score    float32  `json:"score"`
+				Tags     []string `json:"tags"`
+				Notebook string   `json:"notebook"`
+				Category string   `json:"category"`
+				Snippet  string   `json:"snippet"`
 			}
 			var jr []jsonResult
 			for _, r := range results {
 				jr = append(jr, jsonResult{
-					ID: r.Document.ID, Title: r.Document.Title,
-					Score: r.Score, Tags: r.Document.Tags,
+					ID:       r.Document.ID,
+					Title:    r.Document.Title,
+					Score:    r.Score,
+					Tags:     r.Document.Tags,
+					Notebook: r.Document.Notebook,
+					Category: r.Document.Category,
+					Snippet:  r.Snippet,
 				})
 			}
 			data, _ := json.MarshalIndent(jr, "", "  ")
@@ -497,10 +499,8 @@ func configCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Printf("Editor:     %s\n", app.config.Editor)
-			fmt.Printf("Ollama URL: %s\n", app.config.OllamaURL)
-			fmt.Printf("Model:      %s\n", app.config.OllamaModel)
-			fmt.Printf("Storage:    %s\n", defaultStoragePath)
+			fmt.Printf("Editor:  %s\n", app.config.Editor)
+			fmt.Printf("Storage: %s\n", defaultStoragePath)
 			return nil
 		},
 	}
@@ -526,7 +526,7 @@ func serveCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			srv := server.New(app.docRepo, app.linkRepo, app.embed, server.StaticFS)
+			srv := server.New(app.docRepo, app.linkRepo, server.StaticFS)
 			return srv.Start(":" + port)
 		},
 	}
@@ -534,11 +534,55 @@ func serveCmd() *cobra.Command {
 	return cmd
 }
 
+func updateCmd() *cobra.Command {
+	var checkOnly bool
+	cmd := &cobra.Command{
+		Use:   "update",
+		Short: "Update nota to the latest version",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			uc := usecase.NewUpdateUseCase(Version)
+
+			fmt.Printf("Current version: %s\n", Version)
+			fmt.Print("Checking for updates... ")
+
+			result, err := uc.Execute(context.Background(), checkOnly)
+			if err != nil {
+				fmt.Println()
+				return err
+			}
+
+			if result.AlreadyLatest {
+				fmt.Printf("already up to date (%s)\n", result.LatestVersion)
+				return nil
+			}
+
+			if checkOnly {
+				fmt.Printf("\nNew version available: %s → %s\n", result.CurrentVersion, result.LatestVersion)
+				fmt.Println("Run `nota update` to install.")
+				return nil
+			}
+
+			if result.IsDevBuild {
+				fmt.Printf("\nWarning: this is a dev build. Latest release is %s.\n", result.LatestVersion)
+			} else {
+				fmt.Printf("\nUpdating %s → %s\n", result.CurrentVersion, result.LatestVersion)
+			}
+
+			if result.Updated {
+				fmt.Printf("Updated successfully to %s\n", result.LatestVersion)
+			}
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&checkOnly, "check", false, "check for updates without installing")
+	return cmd
+}
+
 func handleAction(action, docID string, app *App) error {
 	ctx := context.Background()
 	switch action {
 	case "edit":
-		uc := usecase.NewEditUseCase(app.docRepo, app.embed, app.config.Editor)
+		uc := usecase.NewEditUseCase(app.docRepo, app.config.Editor)
 		return uc.Execute(ctx, docID)
 	case "delete":
 		uc := usecase.NewDeleteUseCase(app.docRepo)
@@ -565,17 +609,17 @@ func printDocTable(docs []*domain.Document) {
 
 func printSearchTable(results []*usecase.SearchResult) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "ID\tSCORE\tTITLE\tTAGS\tDATA")
-	fmt.Fprintln(w, "--\t-----\t-----\t----\t----")
+	fmt.Fprintln(w, "ID\tSCORE\tTITLE\tTAGS\tNOTEBOOK\tCAT\tDATA")
+	fmt.Fprintln(w, "--\t-----\t-----\t----\t--------\t---\t----")
 	for _, r := range results {
 		d := r.Document
 		tags := strings.Join(d.Tags, ", ")
 		title := d.Title
-		if len(title) > 50 {
-			title = title[:47] + "..."
+		if len(title) > 45 {
+			title = title[:42] + "..."
 		}
-		fmt.Fprintf(w, "%s\t%d%%\t%s\t%s\t%s\n",
-			d.ID, int(r.Score*100), title, tags, d.CreatedAt.Format("2006-01-02"))
+		fmt.Fprintf(w, "%s\t%d%%\t%s\t%s\t%s\t%s\t%s\n",
+			d.ID, int(r.Score*100), title, tags, d.Notebook, d.Category, d.CreatedAt.Format("2006-01-02"))
 	}
 	w.Flush()
 }
@@ -608,36 +652,8 @@ func runSetup(ctx context.Context, storagePath string) error {
 		editorName = "micro"
 	}
 
-	ollamaURL := "http://localhost:11434"
-	ollamaModel := "nomic-embed-text:latest"
-
-	fmt.Print("Ollama URL [http://localhost:11434]: ")
-	var urlInput string
-	fmt.Scanln(&urlInput)
-	if urlInput != "" {
-		ollamaURL = urlInput
-	}
-
-	embedSvc := ollama.New(ollamaURL, ollamaModel)
-	if err := embedSvc.CheckAvailability(ctx); err != nil {
-		fmt.Printf("Warning: %v\n", err)
-		fmt.Print("Pull model now? [Y/n] ")
-		var pullAns string
-		fmt.Scanln(&pullAns)
-		if strings.ToLower(pullAns) != "n" {
-			fmt.Printf("Pulling %s...\n", ollamaModel)
-			if err := ollama.PullModel(ctx, ollamaURL, ollamaModel); err != nil {
-				fmt.Printf("Error pulling model: %v\n", err)
-			} else {
-				fmt.Println("Model pulled successfully")
-			}
-		}
-	}
-
 	cfg := &domain.Config{
 		Editor:      editorName,
-		OllamaURL:   ollamaURL,
-		OllamaModel: ollamaModel,
 		StoragePath: storagePath,
 	}
 	if err := cfgRepo.Save(ctx, cfg); err != nil {

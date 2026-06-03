@@ -3,7 +3,7 @@ CMD=./cmd/nota
 VERSION?=0.1.0
 LDFLAGS=-ldflags "-X github.com/soriano/nota/internal/cli.Version=$(VERSION)"
 
-.PHONY: build build-all clean install test
+.PHONY: build build-all clean install release test
 
 build:
 	go build $(LDFLAGS) -o $(BINARY) $(CMD)
@@ -30,6 +30,14 @@ clean:
 
 install: build
 	cp $(BINARY) /usr/local/bin/$(BINARY)
+
+release: build-all
+	@echo ""
+	@echo "SHA256 checksums:"
+	@shasum -a 256 $(BINARY)-darwin-amd64 $(BINARY)-darwin-arm64 $(BINARY)-linux-amd64 $(BINARY)-linux-arm64 $(BINARY)-windows-amd64.exe 2>/dev/null || \
+	 sha256sum $(BINARY)-darwin-amd64 $(BINARY)-darwin-arm64 $(BINARY)-linux-amd64 $(BINARY)-linux-arm64 $(BINARY)-windows-amd64.exe
+	@echo ""
+	@echo "Release artifacts ready for v$(VERSION)"
 
 test:
 	go test ./...

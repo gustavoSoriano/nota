@@ -1,0 +1,71 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Build all platforms
+        run: make build-all VERSION=${{ steps.version.outputs.VERSION }}
+
+      - name: Generate checksums
+        run: |
+          sha256sum nota-darwin-amd64 nota-darwin-arm64 nota-linux-amd64 nota-linux-arm64 nota-windows-amd64.exe \
+            > checksums.txt
+          cat checksums.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "nota ${{ github.ref_name }}"
+          body: |
+            ## Install
+
+            ```bash
+            curl -fsSL https://raw.githubusercontent.com/gustavoSoriano/nota/main/install.sh | bash
+            ```
+
+            ## Update (if already installed)
+
+            ```bash
+            nota update
+            ```
+
+            ## Manual download
+
+            | Platform | File |
+            |---|---|
+            | macOS (Apple Silicon) | `nota-darwin-arm64` |
+            | macOS (Intel) | `nota-darwin-amd64` |
+            | Linux (x86_64) | `nota-linux-amd64` |
+            | Linux (ARM64) | `nota-linux-arm64` |
+            | Windows (x86_64) | `nota-windows-amd64.exe` |
+          files: |
+            nota-darwin-amd64
+            nota-darwin-arm64
+            nota-linux-amd64
+            nota-linux-arm64
+            nota-windows-amd64.exe
+            checksums.txt
+          generate_release_notes: true

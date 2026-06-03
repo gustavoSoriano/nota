@@ -6,16 +6,15 @@ import (
 )
 
 type Document struct {
-	ID         string    `json:"id"`
-	Title      string    `json:"title"`
-	Content    string    `json:"content"`
-	Tags       []string  `json:"tags"`
-	Notebook   string    `json:"notebook,omitempty"`
-	Category   string    `json:"category,omitempty"`
-	Embedding  []float32 `json:"-"`
-	CreatedAt  time.Time `json:"created_at"`
-	UpdatedAt  time.Time `json:"updated_at"`
-	Accessed   int       `json:"accessed"`
+	ID        string    `json:"id"`
+	Title     string    `json:"title"`
+	Content   string    `json:"content"`
+	Tags      []string  `json:"tags"`
+	Notebook  string    `json:"notebook,omitempty"`
+	Category  string    `json:"category,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	Accessed  int       `json:"accessed"`
 }
 
 func (d *Document) ExtractTitle() string {

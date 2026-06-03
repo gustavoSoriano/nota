@@ -11,20 +11,19 @@ import (
 )
 
 type CreateUseCase struct {
-	repo    domain.DocumentRepository
-	embed   domain.EmbeddingService
-	editor  string
+	repo   domain.DocumentRepository
+	editor string
 }
 
-func NewCreateUseCase(repo domain.DocumentRepository, embed domain.EmbeddingService, editor string) *CreateUseCase {
-	return &CreateUseCase{repo: repo, embed: embed, editor: editor}
+func NewCreateUseCase(repo domain.DocumentRepository, editor string) *CreateUseCase {
+	return &CreateUseCase{repo: repo, editor: editor}
 }
 
 type CreateInput struct {
-	Tags      []string
-	Notebook  string
-	Category  string
-	Content   string
+	Tags     []string
+	Notebook string
+	Category string
+	Content  string
 }
 
 func (uc *CreateUseCase) Execute(ctx context.Context, in CreateInput) (*domain.Document, error) {
@@ -61,11 +60,6 @@ func (uc *CreateUseCase) Execute(ctx context.Context, in CreateInput) (*domain.D
 		UpdatedAt: now,
 	}
 	doc.Title = doc.ExtractTitle()
-
-	embedding, err := uc.embed.Generate(ctx, content)
-	if err == nil {
-		doc.Embedding = embedding
-	}
 
 	if err := uc.repo.Create(ctx, doc); err != nil {
 		return nil, fmt.Errorf("saving document: %w", err)

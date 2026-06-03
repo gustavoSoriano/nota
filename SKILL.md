@@ -1,6 +1,6 @@
 # Nota CLI - Knowledge Base Skill
 
-Nota é um CLI de base de conhecimentos alimentado por markdown com busca semântica via ollama.
+Nota é um CLI de base de conhecimentos alimentado por markdown com busca FTS5 (full-text search) via SQLite. Zero dependências externas.
 
 ## Quando usar
 
@@ -17,11 +17,15 @@ nota new --content "markdown content" --tags tag1,tag2 --notebook dev --cat howt
 nota save "texto ou link" --tags tag1,tag2 --notebook dev
 ```
 
-### Busca semântica (JSON)
+### Busca (JSON)
 ```bash
 nota search "query" --json
 nota search "api node" --json --tags dev --limit 10
+nota search "deploy" --json --notebook work --cat howto
+nota search "golang" --json --cat backend
 ```
+
+A busca cobre automaticamente: título, conteúdo, tags, notebook e category.
 
 ### Abrir nota (markdown puro)
 ```bash
@@ -38,6 +42,7 @@ nota edit <id> --content "novo conteúdo"
 nota list --json
 nota list --tags dev --sort recent --json
 nota list -b dev --json
+nota list --cat howto --json
 ```
 
 ### Deletar nota
@@ -58,7 +63,7 @@ nota restore <arquivo>
 
 ### Interface web
 ```bash
-nota serve              # sobe na :8080
+nota serve              # sobe na :3003
 nota serve --port 3000  # porta customizada
 ```
 
@@ -71,8 +76,8 @@ nota config
 ## Flags
 
 - `-t, --tags` - tags separadas por vírgula
-- `-b, --notebook` - notebook
-- `-c, --cat` - category
+- `-b, --notebook` - notebook (caderno/grupo)
+- `-c, --cat` - category (categoria)
 - `--content` - conteúdo direto (new, edit)
 - `--json` - saída JSON (search, list, tags)
 - `--limit` - máximo de resultados (search, padrão 40)
@@ -81,12 +86,28 @@ nota config
 
 ### search --json
 ```json
-[{"id": "abc123", "title": "...", "score": 0.95, "tags": ["..."]}]
+[{
+  "id": "abc123",
+  "title": "...",
+  "score": 0.95,
+  "tags": ["go", "backend"],
+  "notebook": "work",
+  "category": "howto",
+  "snippet": "...trecho relevante..."
+}]
 ```
 
 ### list --json
 ```json
-[{"id": "abc123", "title": "...", "tags": [...], "notebook": "...", "category": "...", "created_at": "...", "accessed": 3}]
+[{
+  "id": "abc123",
+  "title": "...",
+  "tags": [...],
+  "notebook": "...",
+  "category": "...",
+  "created_at": "...",
+  "accessed": 3
+}]
 ```
 
 ### open
@@ -94,7 +115,7 @@ Markdown puro no stdout.
 
 ## Workflow recomendado
 
-1. `nota search "query" --json` → encontra docs relevantes
+1. `nota search "query" --json` → encontra docs relevantes (busca em título, conteúdo, tags, notebook, category)
 2. `nota open <id>` → lê conteúdo completo
 3. `nota save "info" --tags x` → salva nova info
 4. `nota new --content "md" --tags x` → salva doc estruturado
@@ -103,5 +124,5 @@ Markdown puro no stdout.
 7. `nota serve` → interface web com editor e preview
 
 ## Requisitos
-- ollama com `nomic-embed-text:latest`
-- binário `nota` no PATH
+- Binário `nota` no PATH
+- Sem dependências externas (sem Ollama, sem serviços externos)

@@ -11,17 +11,16 @@ import (
 )
 
 type ImportUseCase struct {
-	repo  domain.DocumentRepository
-	embed domain.EmbeddingService
+	repo domain.DocumentRepository
 }
 
-func NewImportUseCase(repo domain.DocumentRepository, embed domain.EmbeddingService) *ImportUseCase {
-	return &ImportUseCase{repo: repo, embed: embed}
+func NewImportUseCase(repo domain.DocumentRepository) *ImportUseCase {
+	return &ImportUseCase{repo: repo}
 }
 
 type ImportInput struct {
-	Path  string
-	Tags  []string
+	Path     string
+	Tags     []string
 	Notebook string
 }
 
@@ -79,11 +78,6 @@ func (uc *ImportUseCase) importFile(ctx context.Context, path string, in ImportI
 		UpdatedAt: modTime,
 	}
 	doc.Title = doc.ExtractTitle()
-
-	embedding, err := uc.embed.Generate(ctx, string(content))
-	if err == nil {
-		doc.Embedding = embedding
-	}
 
 	if err := uc.repo.Create(ctx, doc); err != nil {
 		return nil, err

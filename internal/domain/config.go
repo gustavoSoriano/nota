@@ -3,10 +3,8 @@ package domain
 import "context"
 
 type Config struct {
-	Editor       string `json:"editor"`
-	OllamaURL    string `json:"ollama_url"`
-	OllamaModel  string `json:"ollama_model"`
-	StoragePath  string `json:"storage_path"`
+	Editor      string `json:"editor"`
+	StoragePath string `json:"storage_path"`
 }
 
 type ConfigRepository interface {

@@ -32,12 +32,12 @@ func (r *linkRepo) Delete(ctx context.Context, sourceID, targetID string) error 
 
 func (r *linkRepo) GetLinked(ctx context.Context, docID string) ([]*domain.Document, error) {
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT d.id, d.title, d.content, d.tags, d.grupo, d.categoria, d.embedding, d.created_at, d.updated_at, d.accessed
+		`SELECT d.id, d.title, d.content, d.tags, d.grupo, d.categoria, d.created_at, d.updated_at, d.accessed
 		 FROM documents d
 		 JOIN document_links l ON l.target_id = d.id
 		 WHERE l.source_id = ?
 		 UNION
-		 SELECT d.id, d.title, d.content, d.tags, d.grupo, d.categoria, d.embedding, d.created_at, d.updated_at, d.accessed
+		 SELECT d.id, d.title, d.content, d.tags, d.grupo, d.categoria, d.created_at, d.updated_at, d.accessed
 		 FROM documents d
 		 JOIN document_links l ON l.source_id = d.id
 		 WHERE l.target_id = ?`, docID, docID)
@@ -50,13 +50,11 @@ func (r *linkRepo) GetLinked(ctx context.Context, docID string) ([]*domain.Docum
 	for rows.Next() {
 		var doc domain.Document
 		var tagsJSON string
-		var embedBlob []byte
 		if err := rows.Scan(&doc.ID, &doc.Title, &doc.Content, &tagsJSON, &doc.Notebook, &doc.Category,
-			&embedBlob, &doc.CreatedAt, &doc.UpdatedAt, &doc.Accessed); err != nil {
+			&doc.CreatedAt, &doc.UpdatedAt, &doc.Accessed); err != nil {
 			return nil, err
 		}
 		json.Unmarshal([]byte(tagsJSON), &doc.Tags)
-		doc.Embedding = blobToFloat32(embedBlob)
 		docs = append(docs, &doc)
 	}
 	return docs, nil

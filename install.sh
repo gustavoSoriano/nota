@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO="soriano/nota"
+REPO="gustavoSoriano/nota"
 BINARY="nota"
 INSTALL_DIR="/usr/local/bin"
 
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 ARCH=$(uname -m)
 case "$ARCH" in
-  x86_64)  ARCH="amd64" ;;
+  x86_64)        ARCH="amd64" ;;
   aarch64|arm64) ARCH="arm64" ;;
   *) echo "Unsupported architecture: $ARCH"; exit 1 ;;
 esac
@@ -46,47 +46,18 @@ if ! command -v micro &> /dev/null; then
       if command -v brew &> /dev/null; then
         brew install micro
       else
-        echo "Install Homebrew first: https://brew.sh"
+        echo "  brew not found — install micro manually: https://micro-editor.github.io"
       fi
       ;;
     linux)
       curl -sL https://getmic.ro | bash
-      [ -w "$INSTALL_DIR" ] && mv micro "$INSTALL_DIR/micro" || sudo mv micro "$INSTALL_DIR/micro"
-      ;;
-  esac
-fi
-
-# Install ollama if not present
-if ! command -v ollama &> /dev/null; then
-  echo ""
-  echo "Installing ollama..."
-  case "$OS" in
-    darwin)
-      if command -v brew &> /dev/null; then
-        brew install ollama
+      if [ -w "$INSTALL_DIR" ]; then
+        mv micro "$INSTALL_DIR/micro"
       else
-        echo "Install ollama manually: https://ollama.com"
+        sudo mv micro "$INSTALL_DIR/micro"
       fi
       ;;
-    linux)
-      curl -fsSL https://ollama.com/install.sh | sh
-      ;;
   esac
-fi
-
-# Start ollama if not running
-if command -v ollama &> /dev/null; then
-  if ! curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
-    echo ""
-    echo "Starting ollama..."
-    ollama serve &
-    sleep 3
-  fi
-
-  # Pull embedding model
-  echo ""
-  echo "Pulling nomic-embed-text model..."
-  ollama pull nomic-embed-text:latest
 fi
 
 echo ""
@@ -95,6 +66,12 @@ nota setup
 
 echo ""
 echo "Done! nota is ready to use."
-echo "Try: nota new"
-echo "     nota save \"my first note\" --tags test"
-echo "     nota search \"my note\" --json"
+echo ""
+echo "Quick start:"
+echo "  nota new                          # create a note"
+echo "  nota save \"text\" --tags dev       # quick capture"
+echo "  nota search \"query\" --json        # search notes"
+echo "  nota serve                        # open web UI"
+echo ""
+echo "To update nota in the future:"
+echo "  nota update"

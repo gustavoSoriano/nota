@@ -9,13 +9,12 @@ import (
 )
 
 type EditUseCase struct {
-	repo    domain.DocumentRepository
-	embed   domain.EmbeddingService
-	editor  string
+	repo   domain.DocumentRepository
+	editor string
 }
 
-func NewEditUseCase(repo domain.DocumentRepository, embed domain.EmbeddingService, editor string) *EditUseCase {
-	return &EditUseCase{repo: repo, embed: embed, editor: editor}
+func NewEditUseCase(repo domain.DocumentRepository, editor string) *EditUseCase {
+	return &EditUseCase{repo: repo, editor: editor}
 }
 
 func (uc *EditUseCase) Execute(ctx context.Context, id string) error {
@@ -44,11 +43,6 @@ func (uc *EditUseCase) Execute(ctx context.Context, id string) error {
 
 	doc.Content = content
 	doc.Title = doc.ExtractTitle()
-
-	embedding, err := uc.embed.Generate(ctx, content)
-	if err == nil {
-		doc.Embedding = embedding
-	}
 
 	return uc.repo.Update(ctx, doc)
 }

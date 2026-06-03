@@ -22,15 +22,13 @@ import (
 type Server struct {
 	docRepo  domain.DocumentRepository
 	linkRepo domain.DocumentLinkRepository
-	embed    domain.EmbeddingService
 	static   embed.FS
 }
 
-func New(docRepo domain.DocumentRepository, linkRepo domain.DocumentLinkRepository, embedSvc domain.EmbeddingService, static embed.FS) *Server {
+func New(docRepo domain.DocumentRepository, linkRepo domain.DocumentLinkRepository, static embed.FS) *Server {
 	return &Server{
 		docRepo:  docRepo,
 		linkRepo: linkRepo,
-		embed:    embedSvc,
 		static:   static,
 	}
 }
@@ -116,11 +114,11 @@ func (s *Server) handleListNotes(w http.ResponseWriter, r *http.Request) {
 	}
 
 	docs, err := uc.Execute(r.Context(), usecase.ListInput{
-		Tags:      tags,
-		Notebook:     r.URL.Query().Get("notebook"),
+		Tags:     tags,
+		Notebook: r.URL.Query().Get("notebook"),
 		Category: r.URL.Query().Get("category"),
-		Sort:      r.URL.Query().Get("sort"),
-		Limit:     200,
+		Sort:     r.URL.Query().Get("sort"),
+		Limit:    200,
 	})
 	if err != nil {
 		writeError(w, 500, err.Error())
@@ -132,8 +130,8 @@ func (s *Server) handleListNotes(w http.ResponseWriter, r *http.Request) {
 		Title     string   `json:"title"`
 		Preview   string   `json:"preview"`
 		Tags      []string `json:"tags"`
-		Notebook   string   `json:"notebook"`
-		Category   string   `json:"category"`
+		Notebook  string   `json:"notebook"`
+		Category  string   `json:"category"`
 		CreatedAt string   `json:"created_at"`
 		UpdatedAt string   `json:"updated_at"`
 		Accessed  int      `json:"accessed"`
@@ -184,8 +182,8 @@ func (s *Server) handleGetNote(w http.ResponseWriter, r *http.Request) {
 		Title     string       `json:"title"`
 		Content   string       `json:"content"`
 		Tags      []string     `json:"tags"`
-		Notebook   string       `json:"notebook"`
-		Category       string       `json:"category"`
+		Notebook  string       `json:"notebook"`
+		Category  string       `json:"category"`
 		CreatedAt string       `json:"created_at"`
 		UpdatedAt string       `json:"updated_at"`
 		Accessed  int          `json:"accessed"`
@@ -208,17 +206,17 @@ func (s *Server) handleGetNote(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleCreateNote(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Content   string   `json:"content"`
-		Tags      []string `json:"tags"`
-		Notebook   string   `json:"notebook"`
-		Category   string   `json:"category"`
+		Content  string   `json:"content"`
+		Tags     []string `json:"tags"`
+		Notebook string   `json:"notebook"`
+		Category string   `json:"category"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeError(w, 400, "invalid body")
 		return
 	}
 
-	uc := usecase.NewSaveUseCase(s.docRepo, s.embed)
+	uc := usecase.NewSaveUseCase(s.docRepo)
 	doc, err := uc.Execute(r.Context(), usecase.SaveInput{
 		Content: body.Content, Tags: body.Tags,
 		Notebook: body.Notebook, Category: body.Category,
@@ -238,10 +236,10 @@ func (s *Server) handleUpdateNote(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body struct {
-		Content   string   `json:"content"`
-		Tags      []string `json:"tags"`
-		Notebook   string   `json:"notebook"`
-		Category   string   `json:"category"`
+		Content  string   `json:"content"`
+		Tags     []string `json:"tags"`
+		Notebook string   `json:"notebook"`
+		Category string   `json:"category"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeError(w, 400, "invalid body")
@@ -257,10 +255,6 @@ func (s *Server) handleUpdateNote(w http.ResponseWriter, r *http.Request) {
 	if body.Content != "" {
 		doc.Content = body.Content
 		doc.Title = doc.ExtractTitle()
-		embedding, embErr := s.embed.Generate(r.Context(), body.Content)
-		if embErr == nil {
-			doc.Embedding = embedding
-		}
 	}
 	if body.Tags != nil {
 		doc.Tags = body.Tags
@@ -306,11 +300,13 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 		tags = strings.Split(t, ",")
 	}
 
-	uc := usecase.NewSearchUseCase(s.docRepo, s.embed)
+	uc := usecase.NewSearchUseCase(s.docRepo)
 	results, err := uc.Execute(r.Context(), usecase.SearchInput{
-		Query: q, Tags: tags,
+		Query:    q,
+		Tags:     tags,
 		Notebook: r.URL.Query().Get("notebook"),
-		Limit: 40,
+		Category: r.URL.Query().Get("category"),
+		Limit:    40,
 	})
 	if err != nil {
 		writeError(w, 500, err.Error())
@@ -323,6 +319,8 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 		Preview   string   `json:"preview"`
 		Snippet   string   `json:"snippet"`
 		Tags      []string `json:"tags"`
+		Notebook  string   `json:"notebook"`
+		Category  string   `json:"category"`
 		Score     float32  `json:"score"`
 		CreatedAt string   `json:"created_at"`
 	}
@@ -337,7 +335,9 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 		}
 		items[i] = searchItem{
 			ID: d.ID, Title: d.Title, Preview: preview,
-			Snippet: r.Snippet, Tags: d.Tags, Score: r.Score,
+			Snippet: r.Snippet, Tags: d.Tags,
+			Notebook: d.Notebook, Category: d.Category,
+			Score:     r.Score,
 			CreatedAt: d.CreatedAt.Format(time.RFC3339),
 		}
 	}
