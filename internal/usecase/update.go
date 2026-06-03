@@ -13,9 +13,10 @@ import (
 )
 
 const (
-	githubRepo   = "gustavoSoriano/nota"
-	githubAPI    = "https://api.github.com/repos/" + githubRepo + "/releases/latest"
-	downloadBase = "https://github.com/" + githubRepo + "/releases/latest/download"
+	githubRepo      = "gustavoSoriano/nota"
+	githubAPI       = "https://api.github.com/repos/" + githubRepo + "/releases/latest"
+	githubLatestURL = "https://github.com/" + githubRepo + "/releases/latest"
+	downloadBase    = "https://github.com/" + githubRepo + "/releases/latest/download"
 )
 
 type UpdateResult struct {
@@ -40,6 +41,57 @@ type githubRelease struct {
 }
 
 func (uc *UpdateUseCase) FetchLatestVersion(ctx context.Context) (string, error) {
+	// Estratégia 1: redirect do GitHub (sem quota de API)
+	// GET /releases/latest redireciona para /releases/tag/vX.Y.Z
+	// Extraímos a versão do header Location sem consumir rate limit
+	if v, err := uc.fetchVersionViaRedirect(ctx); err == nil {
+		return v, nil
+	}
+
+	// Estratégia 2: API JSON (fallback, consome quota)
+	return uc.fetchVersionViaAPI(ctx)
+}
+
+func (uc *UpdateUseCase) fetchVersionViaRedirect(ctx context.Context) (string, error) {
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse // não seguir redirect, pegar o Location
+		},
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, githubLatestURL, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("User-Agent", "nota-cli/"+uc.currentVersion)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	resp.Body.Close()
+
+	// Espera redirect 302 para .../releases/tag/vX.Y.Z
+	if resp.StatusCode != http.StatusFound && resp.StatusCode != http.StatusMovedPermanently {
+		return "", fmt.Errorf("unexpected status %d", resp.StatusCode)
+	}
+
+	loc := resp.Header.Get("Location")
+	if loc == "" {
+		return "", fmt.Errorf("no Location header")
+	}
+
+	// Extrair tag do final da URL: .../releases/tag/v0.1.1
+	parts := strings.Split(strings.TrimRight(loc, "/"), "/")
+	tag := parts[len(parts)-1]
+	version := strings.TrimPrefix(tag, "v")
+	if version == "" || version == tag {
+		return "", fmt.Errorf("could not parse version from %q", loc)
+	}
+	return version, nil
+}
+
+func (uc *UpdateUseCase) fetchVersionViaAPI(ctx context.Context) (string, error) {
 	client := &http.Client{Timeout: 15 * time.Second}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, githubAPI, nil)
 	if err != nil {
@@ -55,13 +107,13 @@ func (uc *UpdateUseCase) FetchLatestVersion(ctx context.Context) (string, error)
 	defer resp.Body.Close()
 
 	if resp.StatusCode == 403 || resp.StatusCode == 429 {
-		return "", fmt.Errorf("GitHub API rate limit reached, try again later")
+		return "", fmt.Errorf("could not check for updates (GitHub rate limit). Try again later or visit github.com/%s/releases", githubRepo)
 	}
 	if resp.StatusCode == 404 {
 		return "", fmt.Errorf("no releases found at github.com/%s", githubRepo)
 	}
 	if resp.StatusCode != 200 {
-		return "", fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
+		return "", fmt.Errorf("GitHub returned status %d", resp.StatusCode)
 	}
 
 	var release githubRelease
@@ -71,7 +123,7 @@ func (uc *UpdateUseCase) FetchLatestVersion(ctx context.Context) (string, error)
 
 	version := strings.TrimPrefix(release.TagName, "v")
 	if version == "" {
-		return "", fmt.Errorf("could not determine latest version from release tag: %q", release.TagName)
+		return "", fmt.Errorf("could not determine version from tag: %q", release.TagName)
 	}
 	return version, nil
 }
