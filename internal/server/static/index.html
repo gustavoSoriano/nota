@@ -205,6 +205,12 @@ html,body{height:100%;overflow:hidden;background:var(--bg-0);color:var(--text-1)
 
 .content-meta-item{display:flex;align-items:center;gap:4px}
 
+.content-meta-id{cursor:pointer;transition:all .15s;padding:2px 6px;border-radius:4px;margin-left:4px}
+
+.content-meta-id:hover{background:var(--bg-3);color:var(--text-1)}
+
+.content-meta-id .id-text{font-family:var(--mono);font-size:10.5px;color:var(--text-4)}
+
 .content-tags-row{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:28px;padding-bottom:24px;border-bottom:1px solid var(--border-1)}
 
 .tag-pill{padding:3px 10px;background:var(--bg-2);border:1px solid var(--border-2);border-radius:20px;font-size:11px;font-weight:500;color:var(--text-3);cursor:pointer;transition:all .1s}
@@ -577,6 +583,23 @@ function stripMd(s) {
   return (s || '').replace(/^#+\s+/gm,'').replace(/\*\*?|__?|~~|`/g,'').replace(/\[([^\]]+)\]\([^)]+\)/g,'$1').trim();
 }
 
+async function copyNoteId(id) {
+  try {
+    await navigator.clipboard.writeText(id);
+    toast('ID copiado: ' + id, 'success');
+  } catch {
+    // Fallback para navegadores antigos
+    const ta = document.createElement('textarea');
+    ta.value = id;
+    ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    ta.remove();
+    toast('ID copiado', 'success');
+  }
+}
+
 // ── Load & render ──────────────────────────────────────────────────────────
 async function loadNotes() {
   showSkeletons();
@@ -781,6 +804,10 @@ function renderContent() {
           ${date ? `<span class="content-meta-item"><svg viewBox="0 0 16 16" fill="none" stroke-width="1.5"><rect x="2" y="3" width="12" height="11" rx="1"/><line x1="5" y1="1" x2="5" y2="5"/><line x1="11" y1="1" x2="11" y2="5"/><line x1="2" y1="7" x2="14" y2="7"/></svg>${date}</span>` : ''}
           <span class="content-meta-item"><svg viewBox="0 0 16 16" fill="none" stroke-width="1.5"><path d="M2 4h12M2 8h8M2 12h5"/></svg>${words} palavras</span>
           ${n.accessed ? `<span class="content-meta-item"><svg viewBox="0 0 16 16" fill="none" stroke-width="1.5"><path d="M1 8s3-5 7-5 7 5 7 5-3 5-7 5-7-5-7-5z"/><circle cx="8" cy="8" r="2"/></svg>${n.accessed}x</span>` : ''}
+          <span class="content-meta-item content-meta-id" onclick="copyNoteId('${n.id}')" title="Clique para copiar o ID">
+            <svg viewBox="0 0 16 16" fill="none" stroke-width="1.5"><rect x="4" y="4" width="10" height="10" rx="1"/><path d="M12 4V3a1 1 0 00-1-1H3a1 1 0 00-1 1v7a1 1 0 001 1h1"/></svg>
+            <span class="id-text">${n.id.slice(0,8)}</span>
+          </span>
         </div>
         ${tags ? `<div class="content-tags-row">${tags}</div>` : '<div style="margin-bottom:28px;padding-bottom:24px;border-bottom:1px solid var(--border-1)"></div>'}
         <div class="md">${marked.parse(n.content || '')}</div>
